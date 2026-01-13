@@ -1,56 +1,53 @@
 import numpy as np
+from config.arguments import parser
+import math
 
 
-class Channel:
+def path_loss(distances, models):
     """
-    对应论文第 2.2 节：信道模型
+    General path loss model
+    :param distances: the distance between robot and BS
+    :param model: path loss model type
+    :return: path loss
     """
-
-    def __init__(self,
-                 noise_power_dbm=-174,
-                 bandwidth=1e6):
-        self.bandwidth = bandwidth
-        self.noise_power = self.dbm_to_watt(noise_power_dbm) * bandwidth
-
-    @staticmethod
-    def dbm_to_watt(dbm):
-        """
-        噪声功率单位转换
-        """
-        return 10 ** ((dbm - 30) / 10)
-
-    def path_loss(self, distances, LOS=True):
-        """
-        大尺度路径损耗（工业环境可调）
-        """
-        pl_los = 31.87 + 21.5 * np.log10(distances) + 19 * np.log10(self.fc)
-        if LOS:
-            pl_db = pl_los
+    freq = parser.parse_args().carrier_frequency
+    pl_list = []
+    for model_idx, model in enumerate(models):
+        if model == "LOS":
+            pl_list.append(31.87 + 21.50 * np.log10(distances[model_idx]) + 19.0 * np.log10(freq))
+        elif model == "NLOS":
+            pl_los = 31.87 + 21.50 * np.log10(distances[model_idx]) + 19.0 * np.log10(freq)
+            pl_sl = 33 + 25.50 * np.log10(distances[model_idx]) + 20 * np.log10(freq)
+            pl_list.append(max(pl_los, pl_sl))
         else:
-            pl_sl = 33 + 25.5 * np.log10(distances) + 20 * np.log10(self.fc)
-            pl_db = max(pl_sl, pl_los)
+            raise ValueError("Unsupported path loss model: {}".format(model))
+    return pl_list
 
-        return self.dbm_to_watt(pl_db)
+def channel_parameter(distances, models):
+    sigma = parser.parse_args().sigma_rayleigh
+    samples = len(distances)
+    fading_factors = np.random.rayleigh(size=samples, scale=sigma)
+    fading_factors = np.clip(fading_factors, a_min=1e-10, a_max=None)
+    path_loss_values = path_loss(distances, models)
+    chn_paras = path_loss_values - 10 * np.log10(fading_factors)
+    return chn_paras
 
-    @staticmethod
-    def small_scale_fading(self):
-        """
-        瑞利衰落
-        g_k ~ CN(0,1)
+def channel_vector_value(chn_paras):
+    beta = 10**(-chn_paras/20)
+    return beta
 
-        对应论文小尺度衰落模型
-        """
-        real = np.random.randn()
-        imag = np.random.randn()
-        return (real + 1j * imag) / np.sqrt(2)
-
-    def channel_gain(self, distance):
-        """
-        总信道增益 |h_k|^2
-
-        h_k = g_k * sqrt(L(d_k))
-        """
-        g = self.small_scale_fading()
-        L = self.path_loss(distance)
-        return np.abs(g) ** 2 * L
-
+if __name__ == "__main__":
+    distances = np.array([1, 10, 100])
+    models_los = ["LOS", "LOS", "LOS"]
+    models = ["LOS", "NLOS", "LOS"]
+    models_nlos = ["NLOS", "NLOS", "NLOS"]
+    pl_values = path_loss(distances, models=models)
+    pl_values_los = path_loss(distances, models=models_los)
+    pl_values_nlos = path_loss(distances, models=models_nlos)
+    print("Path Loss Values(dB):", pl_values)
+    print("Path Loss Values LOS(dB):", pl_values_los)
+    print("Path Loss Values NLOS(dB):", pl_values_nlos)
+    chn_paras = channel_parameter(distances, models=models)
+    print(chn_paras)
+    chn_vct_values = channel_vector_value(chn_paras)
+    print(chn_vct_values)

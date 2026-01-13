@@ -1,7 +1,7 @@
 import numpy as np
-from communication.channel import Channel
-from communication.noma import NOMA
-from communication.ofdma import OFDM
+from communication.path_loss import Channel
+from communication.channel import NOMA
+from communication.rayleigh_distribution import OFDM
 
 
 class Env:

@@ -8,7 +8,9 @@ class RadioMap:
     def __init__(self,
                  area_size=(100, 100),
                  grid_size=5,
-                 num_samples=100):
+                 num_samples=100,
+                 forbidden_areas=None
+                 ):
         """
         area_size : 区域大小 (m, m)
         grid_size : 栅格边长 (m)
@@ -20,6 +22,8 @@ class RadioMap:
 
         self.x_grid = np.arange(0, area_size[0], grid_size)
         self.y_grid = np.arange(0, area_size[1], grid_size)
+
+        self.forbidden_areas = forbidden_areas
 
         self.map = None
 

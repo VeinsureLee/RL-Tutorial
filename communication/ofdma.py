@@ -1,23 +1,28 @@
+from config.arguments import parser
 import numpy as np
+from utils import *
+from scipy.special import erfc
 
 
-class OFDM:
+def gaussian_q_function(x):
     """
-    对应论文第 2.4 节：OFDMA
+    计算高斯Q函数
+    :param x: 输入值（标量/数组）
+    :return: Q(x)的计算结果
     """
+    return 0.5 * erfc(x / np.sqrt(2))
 
-    def __init__(self, noise_power):
-        self.noise_power = noise_power
+def snr_calculate(powers, chn_vct_values):
+    noise_power_dbm = parser.parse_args().power_AWGN
+    noise_power = dbm2watt(noise_power_dbm)
+    K = parser.parse_args().number_of_robots
+    return powers*(chn_vct_values**2)/(K*noise_power)
 
-    def sinr(self, powers, channel_gains):
-        """
-        OFDMA 下 SINR（无干扰）
-        """
-        return (powers * channel_gains) / self.noise_power
+def channel_dispersion():
+    return
 
-    @staticmethod
-    def achievable_rate(self, sinr):
-        """
-        可达速率
-        """
-        return np.log2(1 + sinr)
+if __name__ == "__main__":
+    powers = np.array([1,2,3])
+    chn_vct_values = np.array([1,2,3])
+    print(powers*chn_vct_values)
+    print(snr_calculate(powers, chn_vct_values))
