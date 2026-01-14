@@ -45,19 +45,14 @@ def channel_vector(chn_paras, thetas):
 
 def channel_group(chn_vcts):
     """
-    按信道向量模长从大到小分组
-    cluster1: 最大的一半
-    cluster2: 最小的一半
-    cluster3: 奇数时的中间那个（否则为空数组）
+    Group channel vectors in descending order of their norms.
+    - cluster1: The half with the largest norms
+    - cluster2: The half with the smallest norms
+    - cluster3: The middle one when the total number is odd (empty array otherwise)
     """
     chn_vcts = np.asarray(chn_vcts, dtype=np.complex128)
 
-    if chn_vcts.ndim != 2:
-        raise ValueError("chn_vcts 必须是二维数组 [num_links, num_antennas]")
-
     num_vectors = chn_vcts.shape[0]
-    if num_vectors == 0:
-        raise ValueError("输入的信道向量集合不能为空")
 
     norms = np.linalg.norm(chn_vcts, axis=1)
 
@@ -68,12 +63,10 @@ def channel_group(chn_vcts):
     half = num_vectors // 2
 
     if num_vectors % 2 == 0:
-        # 偶数
         idx1 = slice(0, half)
         idx2 = slice(half, num_vectors)
-        idx3 = slice(0, 0)  # 空
+        idx3 = slice(0, 0)
     else:
-        # 奇数
         idx1 = slice(0, half)
         idx3 = slice(half, half + 1)
         idx2 = slice(half + 1, num_vectors)
@@ -102,36 +95,3 @@ def channel_group(chn_vcts):
         'cluster3': cluster3
     }
 
-
-if __name__ == "__main__":
-    distances = np.array([1, 10, 100])
-    models_los = ["LOS", "LOS", "LOS"]
-    models = ["LOS", "NLOS", "LOS"]
-    models_nlos = ["NLOS", "NLOS", "NLOS"]
-    pl_values = path_loss(distances, models=models)
-    pl_values_los = path_loss(distances, models=models_los)
-    pl_values_nlos = path_loss(distances, models=models_nlos)
-    print("Path Loss Values(dB):", pl_values)
-    print("Path Loss Values LOS(dB):", pl_values_los)
-    print("Path Loss Values NLOS(dB):", pl_values_nlos)
-    chn_paras = channel_parameter(distances, models=models)
-    print(chn_paras)
-    thetas = [0, np.pi / 2, np.pi / 4]
-    chn_vcts = channel_vector(chn_paras, thetas)
-    print(len(chn_vcts[0]),len(chn_vcts))
-    print(chn_vcts)
-    groups = channel_group(chn_vcts)
-
-    # 打印结果
-    print("=== 第一簇（最大的一半）===")
-    print("原始索引:", groups['cluster1']['indices'])
-    print("模长:", groups['cluster1']['norms'])
-
-    print("\n=== 第二簇（最小的一半）===")
-    print("原始索引:", groups['cluster2']['indices'])
-    print("模长:", groups['cluster2']['norms'])
-
-    print("\n=== 落单簇（奇数时存在）===")
-    if groups['cluster3']:
-        print("原始索引:", groups['cluster3']['indices'])
-        print("模长:", groups['cluster3']['norms'])
