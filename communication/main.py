@@ -80,10 +80,18 @@ def test_diag():
 
 
 def test_sic():
+    """
+    完整 BD + NOMA + SIC 测试
+    1️⃣ 按物理簇做 Block Diagonalization (簇间干扰消除)
+    2️⃣ 簇内按信道增益自动划分强/弱用户
+    3️⃣ 自动跳过空簇或 BD 失败簇
+    4️⃣ 打印簇间干扰和簇内强/弱用户 SINR
+    """
     # ========== 参数 ==========
     num_users_per_cluster = 6
     num_clusters = 3
 
+    # 距离和信道模型
     distances = np.concatenate([
         np.full(num_users_per_cluster, 10),
         np.full(num_users_per_cluster, 50),
@@ -103,6 +111,7 @@ def test_sic():
     chn_vcts = channel_vector(chn_paras, thetas)
     groups = channel_group(chn_vcts)
 
+    # 物理簇列表
     cluster_list = [
         groups['cluster1']['vectors'],
         groups['cluster2']['vectors'],
@@ -110,42 +119,47 @@ def test_sic():
     ]
 
     # ---------- BD + NOMA + SIC ----------
-    for m in range(len(cluster_list)):
-        print(f"\n========== Cluster {m + 1} ==========")
-
-        H_m = cluster_list[m]          # (N_m, Nt)
-        w_m = matrix_cal(cluster_list, m)  # (Nt, N_m)
-        if w_m.shape[1] == 0:
-            print(f"Cluster {m + 1}: w_m is empty, skipping SINR calculation")
+    for m, H_m in enumerate(cluster_list):
+        if H_m.size == 0:
+            print(f"\nCluster {m+1}: empty cluster, skipping")
             continue
 
-        # ===== 1️⃣ 簇间干扰验证 =====
+        print(f"\n========== Cluster {m + 1} ==========")
+
+        # 1️⃣ BD 计算
+        w_m = matrix_cal(cluster_list, m)
+
+        if w_m.shape[1] == 0:
+            print(f"Cluster {m+1}: BD failed (no null space), skipping SINR")
+            continue
+
+        # 2️⃣ 簇间干扰打印
         for k, H_k in enumerate(cluster_list):
             interf = np.linalg.norm(H_k @ w_m, ord='fro')
             print(f"|| H_{k} @ w_{m} ||_F = {interf:.3e}")
 
-        # ===== 2️⃣ 选 NOMA 波束并归一化 =====
+        # 3️⃣ 簇内 NOMA 波束选择（第一根波束）
         w = w_m[:, 0]
         w = w / np.linalg.norm(w)
 
-        # ===== 3️⃣ 强 / 弱用户排序 =====
-        eff_gains = np.abs(H_m @ w) ** 2
-        idx = np.argsort(eff_gains)[::-1]
+        # 4️⃣ 簇内强/弱用户划分
+        eff_gains = np.abs(H_m @ w)**2
+        sorted_idx = np.argsort(eff_gains)[::-1]  # 从大到小
+        h_strong = H_m[sorted_idx[0], :]
+        h_weak   = H_m[sorted_idx[1], :]
 
-        h_strong = H_m[idx[0], :]
-        h_weak   = H_m[idx[1], :]
-
-        # ===== 4️⃣ SINR (SIC) =====
+        # 5️⃣ SINR 计算
         sinr_1, sinr_2 = compute_sinr(
             h_strong,
             h_weak,
             w,
-            P1=1.0,   # 强用户功率
-            P2=2.0    # 弱用户功率
+            P1=1.0,  # 强用户功率
+            P2=100.0   # 弱用户功率
         )
 
         print(f"SINR strong user : {10 * np.log10(sinr_1):.2f} dB")
         print(f"SINR weak user   : {10 * np.log10(sinr_2):.2f} dB")
+
 
 
 
