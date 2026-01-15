@@ -1,5 +1,5 @@
 import numpy as np
-from config.arguments import parser
+from config.param_arguments import parser
 from utils import *
 from scipy.special import erfc
 
