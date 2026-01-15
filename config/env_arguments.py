@@ -6,48 +6,16 @@ from typing import Union
 import numpy as np
 import argparse
 
-parser = argparse.ArgumentParser("Map settings for Environment")
 
-## ==================== Forbidden area settings ====================
-forbidden_states = []
-# 添加 (i,1)，i从0到4（range(5) 是 0,1,2,3,4）
-forbidden_states.extend([(i, 1) for i in range(5)])
-# 添加 (1,j)，j从2到5（range(2,6) 是 2,3,4,5）
-forbidden_states.extend([(1, j) for j in range(2, 6)])
-# 添加 (i,3)，i从3到5（range(3,6) 是 3,4,5）
-forbidden_states.extend([(i, 3) for i in range(3, 5)])
-# 添加单独的禁止状态
-forbidden_states.extend([(5, 4), (3, 5)])
-## ==================== Forbidden area settings ====================
+parser = argparse.ArgumentParser("Settings for Environment")
 
 
-## ==================== User settings ===================='''
-# specify the frequency of the carrier in GHz
-parser.add_argument("--carrier-frequency", type=float, default=3.5)
-
-# specify the sigma of rayleigh distribution (Usually set 1.2 in door)
-parser.add_argument("--sigma_rayleigh", type=float, default=1.2)
-
-# specify the number of antenna
-parser.add_argument("--number_of_antenna", type=int, default=128)
-
-# specify the antenna position in map
-parser.add_argument("--antenna_position", type=Union[list, tuple, np.ndarray], default=(24,12))
-
-# specify the power of AWGN in dbm/Hz
-parser.add_argument("--power_AWGN", type=float, default=-143.0)
-
-# specify the channel block length
-parser.add_argument("--channel_block_length", type=int, default=256)
-
-# specify the packet size
-parser.add_argument("--packet_size", type=int, default=16)
-
-# specify the number of robots
-parser.add_argument("--number_of_robots", type=int, default=4)
-
+## ==================== User settings ====================
 # specify the size of the environment
-parser.add_argument("--map-size", type=Union[list, tuple, np.ndarray], default=(48, 24))
+parser.add_argument("--map-grid-size", type=Union[list, tuple, np.ndarray], default=(48, 24))
+
+# specify the size of the grid
+parser.add_argument("--grid_size", type=float, default=0.4)
 
 # specify the start state
 parser.add_argument("--start-states", type=Union[list, tuple, np.ndarray], default=(0, 0))

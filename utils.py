@@ -1,4 +1,4 @@
-from config.arguments import parser
+from config.param_arguments import parser
 import math
 import numpy as np
 
