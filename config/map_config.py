@@ -29,7 +29,7 @@ RANDOM_SEED = 42
 NUM_FORBIDDEN_SQUARES = 5
 
 # range of square size
-SQUARE_SIZE_RANGE = (2, 5)
+SQUARE_SIZE_RANGE = (3, 5)
 
 # forbidden areas can't cover start/target states
 PROTECTED_COORDS = [start_states, target_state]
