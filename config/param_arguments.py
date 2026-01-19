@@ -33,7 +33,7 @@ parser.add_argument("--channel_block_length", type=int, default=256)
 parser.add_argument("--packet_size", type=int, default=16)
 
 # specify the number of robots
-parser.add_argument("--number_of_robots", type=int, default=4)
+parser.add_argument("--number_of_robots", type=int, default=2)
 ## ==================== End of User settings ====================
 
 
