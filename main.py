@@ -7,12 +7,14 @@ import random
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from env.env import Env
+from rl_algorithms.agent import Agent
 
 
-def random_policy(env, max_steps=200):
+def run_with_agent(env, agent, max_steps=200):
     """
-    随机策略：在每个步骤中为每个agent随机选择一个动作
+    使用Agent策略运行环境
     :param env: 环境实例
+    :param agent: Agent实例
     :param max_steps: 最大步数
     :return: 是否所有agent都到达目标
     """
@@ -27,8 +29,27 @@ def random_policy(env, max_steps=200):
     action_names = {(0, 1): "下", (1, 0): "右", (0, -1): "上", (-1, 0): "左", (0, 0): "停留"}
     
     for step in range(max_steps):
-        # 为每个agent随机选择一个动作
-        actions = [random.choice(env.action_space) for _ in range(env.num_agents)]
+        # 使用agent选择动作
+        actions = agent.select_action(states, training=False)
+        
+        # 如果返回的是单个动作，转换为列表（兼容单agent情况）
+        if not isinstance(actions, (list, tuple, np.ndarray)):
+            actions = [actions]
+        elif isinstance(actions, tuple) and len(actions) == 2:
+            # 检查是否是动作tuple还是状态tuple
+            if isinstance(actions[0], (int, float, np.integer, np.floating)):
+                actions = [actions]
+        
+        # 确保actions是列表格式
+        if not isinstance(actions, list):
+            actions = list(actions) if hasattr(actions, '__iter__') else [actions]
+        
+        # 确保actions数量正确
+        if len(actions) != env.num_agents:
+            if env.num_agents == 1:
+                actions = [actions[0] if len(actions) > 0 else random.choice(env.action_space)]
+            else:
+                actions = [random.choice(env.action_space) for _ in range(env.num_agents)]
         
         # 执行动作
         next_states, rewards, dones, _ = env.step(actions)
@@ -38,6 +59,9 @@ def random_policy(env, max_steps=200):
         state_str = ", ".join([f"Agent{i+1}:{s}" for i, s in enumerate(next_states)])
         reward_str = ", ".join([f"Agent{i+1}:{r:.1f}" for i, r in enumerate(rewards)])
         print(f"步数 {step+1}: 动作=[{action_str}], 状态=[{state_str}], 奖励=[{reward_str}]")
+        
+        # 更新状态
+        states = next_states
         
         # 检查是否所有agent都完成
         if all(dones):
@@ -50,17 +74,20 @@ def random_policy(env, max_steps=200):
 
 def main():
     """
-    主函数：创建环境，运行随机策略并渲染
+    主函数：创建环境和Agent，运行Agent策略并渲染
     """
     print("=" * 50)
-    print("随机策略测试")
+    print("使用Agent策略测试")
     print("=" * 50)
     
     # 创建环境
     env = Env()
     
-    # 运行随机策略
-    success = random_policy(env, max_steps=10000)
+    # 创建Agent（使用随机策略）
+    agent = Agent(env)
+    
+    # 使用Agent运行环境
+    success = run_with_agent(env, agent, max_steps=10000)
     
     print("\n" + "=" * 50)
     print("开始渲染环境")
