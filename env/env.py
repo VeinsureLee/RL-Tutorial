@@ -7,6 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from config.env_arguments import env_parser
+from PIL import Image
+import io
+from tqdm import tqdm
+
 
 # 设置matplotlib支持中文
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
@@ -299,11 +303,12 @@ class Env:
         
         return None
 
-    def render_animation(self, interval=200, save_path=None):
+    def render_animation(self, interval=200, save_path=None, max_frames=100):
         """
         生成动画，按帧显示agent的移动过程
         :param interval: 每帧之间的时间间隔（毫秒）
         :param save_path: 如果提供，保存动画为gif文件
+        :param max_frames: 保存GIF时的最大帧数，超过此数量将抽取关键帧（默认1000）
         :return: FuncAnimation对象
         """
         if len(self.traj) == 0:
@@ -398,7 +403,56 @@ class Env:
                            interval=interval, blit=True, repeat=True)
         
         if save_path:
-            anim.save(save_path, writer='pillow', fps=1000//interval)
+            # 如果帧数超过max_frames，使用关键帧抽取
+            if max_traj_length > max_frames:
+                print(f"总帧数 {max_traj_length} 超过最大帧数 {max_frames}，开始抽取关键帧...")
+                # 抽取关键帧：第一帧、最后一帧，以及中间均匀采样
+                key_frames = [0]  # 第一帧
+                if max_traj_length > 1:
+                    # 中间均匀采样
+                    step = (max_traj_length - 1) / (max_frames - 1)
+                    for i in range(1, max_frames - 1):
+                        frame_idx = int(round(i * step))
+                        if frame_idx < max_traj_length and frame_idx not in key_frames:
+                            key_frames.append(frame_idx)
+                    # 最后一帧
+                    if max_traj_length - 1 not in key_frames:
+                        key_frames.append(max_traj_length - 1)
+                
+                print(f"抽取了 {len(key_frames)} 个关键帧（从 {max_traj_length} 帧中）")
+                
+                # 渲染关键帧并保存为GIF
+                frames = []
+                print("正在渲染关键帧...")
+                for frame_idx in tqdm(key_frames, desc="渲染进度", total=len(key_frames)):
+                    # 更新动画到指定帧
+                    animate(frame_idx)
+                    fig.canvas.draw()
+                    
+                    # 将matplotlib图形转换为PIL Image
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                    buf.seek(0)
+                    img = Image.open(buf)
+                    frames.append(img.copy())
+                    buf.close()
+                
+                # 保存为GIF
+                if len(frames) > 0:
+                    print("正在保存GIF文件...")
+                    frames[0].save(
+                        save_path,
+                        save_all=True,
+                        append_images=frames[1:],
+                        duration=interval,  # 每帧持续时间（毫秒）
+                        loop=0  # 无限循环
+                    )
+                    print(f"GIF已保存到: {save_path} (共 {len(frames)} 帧)")
+            else:
+                # 帧数不多，使用原来的方法
+                print(f"正在保存GIF文件（共 {max_traj_length} 帧）...")
+                anim.save(save_path, writer='pillow', fps=1000//interval)
+                print(f"GIF已保存到: {save_path}")
         
         plt.tight_layout()
         plt.show()
