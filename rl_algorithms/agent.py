@@ -9,65 +9,36 @@ class Agent:
     其他强化学习算法可以继承此类并重写相关方法
     """
     
-    def __init__(self, env):
-        """
-        初始化Agent
-        :param env: 环境实例，必须包含action_space属性
-        """
+    def __init__(self, env,
+                 lr = 0.001, gamma = 0.99, 
+                 epsilon = 1.0, epsilon_min = 0.01, epsilon_decay = 0.995,
+                 num_episodes = 10, episode_length = 400000):
+        # 初始化环境
         self.env = env
-        self.action_space = env.action_space
-        self.num_actions = len(env.action_space)
         
-    def select_action(self, state: Any, agent_id: Optional[int] = None, training: bool = True) -> Any:
+        # 初始化超参数
+        self.num_episodes = num_episodes
+        self.episode_length = episode_length
+        
+        self.lr = lr
+        self.gamma = gamma
+        
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        
+    def select_action(self, state, agent_id = None, training = True):
         """
         使用随机策略选择动作
-        
-        :param state: 当前状态（可以是单个状态或状态列表）
-        :param agent_id: agent的ID（可选，用于多agent场景）
-        :param training: 是否处于训练模式（可选，用于区分训练和测试）
-        :return: 选择的动作（单个动作或动作列表）
+        :param state: 状态
+        :param training: 是否处于训练模式
+        :return: action value估计
         """
-        # 如果是多agent环境，为每个agent随机选择动作
-        if hasattr(self.env, 'num_agents') and self.env.num_agents > 1:
-            # 如果state是列表，说明是多个agent的状态
-            if isinstance(state, (list, tuple)) and len(state) == self.env.num_agents:
-                # 若agent已到达target，则始终停留在原地
-                actions = []
-                for i, s in enumerate(state):
-                    # 获取对应target
-                    target = self.env.target_states[i] if hasattr(self.env, "target_states") else None
-                    if target is not None and tuple(s) == tuple(target):
-                        # 停留在原地（假设action_space中有(0,0))
-                        stay_action = (0, 0)
-                        # 如果(0,0)不在action_space，则选择第一个动作
-                        if stay_action in self.action_space:
-                            actions.append(stay_action)
-                        else:
-                            actions.append(self.action_space[0])
-                    else:
-                        actions.append(random.choice(self.action_space))
-                return actions
-            else:
-                # 单个agent的情况，但环境支持多agent
-                # 也检查state是否已到target
-                target = self.env.target_states[0] if hasattr(self.env, "target_states") else None
-                if target is not None and tuple(state) == tuple(target):
-                    stay_action = (0, 0)
-                    if stay_action in self.action_space:
-                        return stay_action
-                    else:
-                        return self.action_space[0]
-                return random.choice(self.action_space)
+        target = self.env.target_states[agent_id]
+        if state == target:
+            return (0, 0)
         else:
-            # 单agent环境
-            target = self.env.target_state if hasattr(self.env, "target_state") else None
-            if target is not None and tuple(state) == tuple(target):
-                stay_action = (0, 0)
-                if stay_action in self.action_space:
-                    return stay_action
-                else:
-                    return self.action_space[0]
-            return random.choice(self.action_space)
+            return random.choice(self.env.action_space)
     
     def train(self, *args, **kwargs):
         """
