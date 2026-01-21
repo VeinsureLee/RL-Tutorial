@@ -31,6 +31,9 @@ class Env:
         self.grid_rows = int(round(self.map_size[0] / self.grid_size))
         self.grid_cols = int(round(self.map_size[1] / self.grid_size))
         self.size = (self.grid_rows, self.grid_cols)
+        self.x_dim = self.grid_rows
+        self.y_dim = self.grid_cols
+        self.action_dim = len(args.action_space)
 
         # 将连续坐标转换为离散网格坐标
         start_state_raw = self._continuous_to_discrete(args.start_states)
