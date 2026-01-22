@@ -33,6 +33,7 @@ class Env:
         self.size = (self.grid_rows, self.grid_cols)
         self.x_dim = self.grid_rows
         self.y_dim = self.grid_cols
+        self.state_num = self.x_dim * self.y_dim
         self.action_dim = len(args.action_space)
 
         # 将连续坐标转换为离散网格坐标
