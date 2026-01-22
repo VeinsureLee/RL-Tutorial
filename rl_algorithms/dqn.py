@@ -15,62 +15,112 @@ from rl_algorithms.agent import Agent
 from env.env import Env
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+import torch
+import torch.nn as nn
+
+
 class Qnet(nn.Module):
     """
-    Q网络，输入state idx和target state idx，使用embedding，输出action value估计
-    加入相对位置信息以引导向目标靠近
+    Q(s, a | fixed target)
+
+    target 是常数，不作为网络输入
+    相对位置信息作为主干
     """
-    def __init__(self, state_num, embedding_dim = 64, hidden_dim = 128, action_dim = 5, x_dim = None, y_dim = None):
-        super(Qnet, self).__init__()
-        self.embedding = nn.Embedding(state_num, embedding_dim)
-        self.target_embedding = nn.Embedding(state_num, embedding_dim)
+
+    def __init__(
+        self,
+        state_num: int,
+        action_dim: int,
+        x_dim: int,
+        y_dim: int,
+        target_xy: tuple,          # (tx, ty)
+        embedding_dim: int = 32,
+        hidden_dim: int = 128,
+    ):
+        super().__init__()
+
         self.x_dim = x_dim
         self.y_dim = y_dim
-        
-        # 相对位置特征维度：dx, dy, distance (3维)
-        relative_dim = 3
-        # 拼接 state embedding, target embedding 和相对位置特征
-        self.fc1 = nn.Linear(embedding_dim * 2 + relative_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, action_dim)
-        
-    def _idx_to_coord(self, state_idx, x_dim, y_dim):
-        """将 state_idx 转换为坐标 (x, y)"""
-        x = state_idx // y_dim
-        y = state_idx % y_dim
-        return x, y
-        
-    def forward(self, state_idx, target_state_idx):
+
+        # ===== 固定 target（不参与训练）=====
+        target = torch.tensor(target_xy, dtype=torch.long)
+        self.register_buffer("target_xy", target)
+
+        # ===== state embedding（辅助）=====
+        self.embedding = nn.Embedding(state_num, embedding_dim)
+
+        self.abs_fc = nn.Sequential(
+            nn.Linear(embedding_dim, 64),
+            nn.ReLU(),
+        )
+
+        # ===== relative position branch（主干）=====
+        self.rel_fc = nn.Sequential(
+            nn.Linear(8, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+        )
+
+        # ===== fusion head =====
+        self.head = nn.Sequential(
+            nn.Linear(128, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, action_dim),
+        )
+
+    def forward(self, state_idx: torch.Tensor):
         """
-        :param state_idx: state索引，形状为 (batch_size,) 的 long tensor
-        :param target_state_idx: target state索引，形状为 (batch_size,) 的 long tensor
-        :return: action value，形状为 (batch_size, action_dim)
+        state_idx: (B,)
         """
+
+        # ===== absolute state embedding =====
         state_emb = self.embedding(state_idx)
-        target_emb = self.target_embedding(target_state_idx)
-        
-        # 计算相对位置信息（引导向目标靠近）
-        if self.x_dim is not None and self.y_dim is not None:
-            # 将 idx 转换为坐标
-            state_x = state_idx // self.y_dim
-            state_y = state_idx % self.y_dim
-            target_x = target_state_idx // self.y_dim
-            target_y = target_state_idx % self.y_dim
-            
-            # 计算相对位置：dx, dy, distance
-            dx = (target_x - state_x).float() / self.x_dim  # 归一化
-            dy = (target_y - state_y).float() / self.y_dim  # 归一化
-            distance = torch.sqrt(dx**2 + dy**2 + 1e-8)  # 避免除零
-            
-            relative_features = torch.stack([dx, dy, distance], dim=1)
-        else:
-            # 如果没有提供 x_dim 和 y_dim，则不使用相对位置信息
-            relative_features = torch.zeros(state_idx.shape[0], 3, device=state_idx.device)
-        
-        # 拼接 state embedding, target embedding 和相对位置特征
-        x = torch.cat((state_emb, target_emb, relative_features), dim=1)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        h_abs = self.abs_fc(state_emb)
+
+        # ===== relative position to fixed target =====
+        sx = state_idx // self.y_dim
+        sy = state_idx % self.y_dim
+
+        tx, ty = self.target_xy
+        tx = tx.expand_as(sx)
+        ty = ty.expand_as(sy)
+
+        dx = (tx - sx).float()
+        dy = (ty - sy).float()
+
+        dx_n = dx / self.x_dim
+        dy_n = dy / self.y_dim
+
+        abs_dx = torch.abs(dx_n)
+        abs_dy = torch.abs(dy_n)
+
+        l1 = abs_dx + abs_dy
+        l2 = torch.sqrt(dx_n ** 2 + dy_n ** 2 + 1e-8)
+
+        sign_dx = torch.sign(dx_n)
+        sign_dy = torch.sign(dy_n)
+
+        rel_feat = torch.stack(
+            [dx_n, dy_n, abs_dx, abs_dy, l1, l2, sign_dx, sign_dy],
+            dim=1,
+        )
+
+        h_rel = self.rel_fc(rel_feat)
+
+        # ===== fusion =====
+        h = torch.cat([h_abs, h_rel], dim=1)
+        q = self.head(h)
+
+        return q
+
+
+
     
 class ReplayBuffer:
     """
@@ -79,14 +129,11 @@ class ReplayBuffer:
     def __init__(self, max_size):
         self.buffer = deque(maxlen = max_size)
         
-    def add(self, state, action, reward, next_state, done):
-        self.buffer.append((state, action, reward, next_state, done))
+    def add(self, state, action, reward, next_state, done, target):
+        self.buffer.append((state, action, reward, next_state, done, target))
         
     def sample(self, batch_size):
         return random.sample(self.buffer, batch_size)
-    
-    def size(self):
-        return len(self.buffer)
     
     def __len__(self):
         return len(self.buffer)
@@ -111,10 +158,14 @@ class DQN(Agent):
         self.hidden_dim = hidden_dim
         # 初始化Q网络和目标Q网络
         state_num = env.state_num # 总状态数
+        # 获取第一个agent的target作为固定target（Qnet设计为固定target）
+        target_xy = env.target_states[0]  # (x, y) 元组
         self.qnet = Qnet(state_num = state_num, embedding_dim = 64, hidden_dim = hidden_dim, 
-                         action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim)
+                         action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim,
+                         target_xy = target_xy)
         self.target_qnet = Qnet(state_num = state_num, embedding_dim = 64, hidden_dim = hidden_dim, 
-                                action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim)
+                                action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim,
+                                target_xy = target_xy)
         self.target_qnet.load_state_dict(self.qnet.state_dict())
         self.target_qnet.eval()
         
@@ -167,10 +218,9 @@ class DQN(Agent):
         else:
             # 将 (x, y) 转换为 state_idx: state_idx = x * y_dim + y
             state_idx_tensor = self._state_to_idx_tensor(state)
-            target_idx_tensor = self._state_to_idx_tensor(target)
             
             with torch.no_grad():
-                action_values = self.qnet(state_idx_tensor, target_idx_tensor)
+                action_values = self.qnet(state_idx_tensor)
             
             # 获取最优动作
             optimal_action = action_values.argmax(dim=1).item()
@@ -192,108 +242,87 @@ class DQN(Agent):
                 return optimal_action
     
     def update(self):
-        """
-        从ReplayBuffer采样批量经验，更新QNet及policy
-        """
         batch = self.buffer.sample(self.mini_batch_size)
-        states = np.array([b[0] for b in batch], dtype=np.int64)
-        actions = np.array([b[1] for b in batch], dtype=np.int64)
+
+        states = np.array([b[0] for b in batch])
+        actions = np.array([b[1] for b in batch])
         rewards = np.array([b[2] for b in batch], dtype=np.float32)
-        next_states = np.array([b[3] for b in batch], dtype=np.int64)
+        next_states = np.array([b[3] for b in batch])
         dones = np.array([b[4] for b in batch], dtype=np.float32)
+        targets = np.array([b[5] for b in batch])
 
-        # 使用 _state_to_idx_tensor 将状态转换为 state_idx
-        state_idx_tensor = self._state_to_idx_tensor(states)
-        next_state_idx_tensor = self._state_to_idx_tensor(next_states)
-        # 获取 target state（假设所有样本都是 agent_id=0）
-        target_state = self.env.target_states[0]
-        target_state_idx = int(target_state[0]) * self.env.y_dim + int(target_state[1])
-        # 创建与 batch_size 相同大小的 target_state_idx tensor
-        target_state_idx_tensor = torch.full((len(states),), target_state_idx, dtype=torch.long, device=self.device)
-        
+        state_idx = self._state_to_idx_tensor(states)
+        next_state_idx = self._state_to_idx_tensor(next_states)
+
         action_tensor = torch.tensor(actions, dtype=torch.long, device=self.device)
-        reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        done_tensor = torch.tensor(dones, dtype=torch.float32, device=self.device)
+        reward_tensor = torch.tensor(rewards, device=self.device)
 
-        # 当前Q值
-        q_values = self.qnet(state_idx_tensor, target_state_idx_tensor)
-        q_values = q_values.gather(1, action_tensor.unsqueeze(1)).squeeze(1)
+        q = self.qnet(state_idx)
+        q = q.gather(1, action_tensor.unsqueeze(1)).squeeze(1)
 
-        # 目标Q值
         with torch.no_grad():
-            next_q_values = self.target_qnet(next_state_idx_tensor, target_state_idx_tensor)
-            max_next_q_values, _ = next_q_values.max(dim=1)
-            td_targets = reward_tensor + self.gamma * max_next_q_values * (1 - done_tensor)
+            next_q = self.target_qnet(next_state_idx)
+            max_next_q = next_q.max(dim=1)[0]
+            td_target = reward_tensor + self.gamma * max_next_q
 
-        # 损失与优化
-        loss = self.loss_fn(q_values, td_targets)
+        loss = self.loss_fn(q, td_target)
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
         return loss.item()
+
     
     def update_target_qnet(self):
         """同步目标Q网络参数"""
         self.target_qnet.load_state_dict(self.qnet.state_dict())
     
     def train(self):
-        with tqdm(range(1, self.num_episodes + 1), desc="Training", unit='episode') as pbar:
-            for global_episode in pbar:
-                states, _ = self.env.reset()
-                current_state = states[0] if isinstance(states, list) else states
-                episode_reward = 0
-                step_count = 0
+        for ep in range(1, self.num_episodes + 1):
+            states, _ = self.env.reset()
+            state = states[0]
+            target = self.env.target_states[0]
 
-                while step_count < self.episode_length:
-                    # 如果已经到达目标，直接结束episode
-                    if current_state == self.env.target_states[0]:
-                        # 到达目标，给予目标奖励
-                        episode_reward += self.env.reward_target
-                        break
-                    
-                    # take_action 现在总是返回动作索引
-                    action_idx = self.take_action(current_state, agent_id=0, training=True)
-                    action = self.env.action_space[action_idx]
-                    
-                    next_state, reward, done, _ = self.env.step(action)
+            ep_return = 0
 
-                    episode_reward += reward
+            for t in range(self.episode_length):
+                action_idx = self.take_action(state, agent_id=0, training=True)
+                action = self.env.action_space[action_idx]
 
-                    # 存入经验
-                    self.buffer.add(current_state, action_idx, reward, next_state, done)
+                next_state, reward, done, _ = self.env.step(action)
 
-                    # 更新Q网络
-                    if self.buffer.size() >= self.mini_batch_size:
-                        self.update()
+                ep_return += reward
 
-                    # 更新当前状态
-                    current_state = next_state
-                    # epsilon 衰减
-                    self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-                    step_count += 1
+                self.buffer.add(
+                    state,
+                    action_idx,
+                    reward,
+                    next_state,
+                    done,
+                    target
+                )
 
-                    # 同步目标网络
-                    if step_count % self.update_freq == 0:
-                        self.update_target_qnet()
+                if len(self.buffer) >= self.mini_batch_size:
+                    self.update()
 
-                    if done:
-                        break
+                state = next_state
 
-                if global_episode % 10 == 0:
-                    pbar.set_postfix({
-                        'epsilon': f"{self.epsilon:.3f}",
-                        'return': f"{episode_reward:.3f}",
-                        'steps': f"{step_count}",
-                        'buffer': f"{self.buffer.size()}"
-                    })
-                
-                # 添加调试信息：如果前几个episode的reward都是0，打印详细信息
-                if global_episode <= 3:
-                    print(f"\nEpisode {global_episode}: reward={episode_reward:.3f}, steps={step_count}, "
-                          f"start={states[0] if isinstance(states, list) else states}, "
-                          f"target={self.env.target_states[0]}, buffer_size={self.buffer.size()}")
-    
+                if t % self.update_freq == 0:
+                    self.update_target_qnet()
+
+                if done:
+                    break
+
+            # epsilon **按 episode 衰减**
+            self.epsilon = max(
+                self.epsilon_min,
+                self.epsilon * self.epsilon_decay
+            )
+
+            print(f"Episode {ep} | return={ep_return:.2f} | epsilon={self.epsilon:.3f}")
+
+        
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save({
@@ -315,10 +344,20 @@ class DQN(Agent):
 if __name__ == "__main__":
     env = Env()
     env.reward_target = 100
-    env.reward_forbidden = -5
+    env.reward_forbidden = -1
     env.reward_step = -1
-    dqn = DQN(env, lr=0.001, gamma=1, epsilon=1.0, epsilon_min=0.01, 
-              epsilon_decay=0.995, batch_size=64, mini_batch_size=200, hidden_dim=128, 
-              num_episodes=50, episode_length=1000, update_freq=50)
+    dqn =DQN(
+                env,
+                lr=1e-3,
+                gamma=0.99,
+                epsilon=1,
+                epsilon_decay=0.95,   # 按 episode
+                epsilon_min=0.4,
+                num_episodes=50,
+                episode_length=4000,
+                mini_batch_size=64,
+                update_freq=200
+            )
+
     dqn.train()
     dqn.save("models/dqn_model.pth")
