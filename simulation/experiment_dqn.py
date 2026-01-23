@@ -38,7 +38,7 @@ def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
             actions = []
             for agent_id in range(env.num_agents):
                 state_i = states[agent_id] if isinstance(states, list) else states
-                action_idx = agent.take_action(state_i, agent_id=agent_id, training=training)
+                action_idx = agent.take_action(state_i, training=training)
                 # 将索引转换为环境动作
                 if isinstance(action_idx, (int, np.integer)) and 0 <= action_idx < env.num_actions:
                     actions.append(env.action_space[action_idx])

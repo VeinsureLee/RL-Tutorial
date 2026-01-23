@@ -39,7 +39,7 @@ env_parser.add_argument("--forbidden-areas", type=eval,
 
 # specify the reward when reaching target
 env_parser.add_argument("--reward-target", type=float,
-                        default=100)
+                        default=10)
 
 # specify the reward when entering into forbidden area
 env_parser.add_argument("--reward-forbidden", type=float,
@@ -47,7 +47,7 @@ env_parser.add_argument("--reward-forbidden", type=float,
 
 # specify the reward for each step
 env_parser.add_argument("--reward-step", type=float,
-                        default=0)
+                        default=-1)
 ## ==================== End of User settings ====================
 
 

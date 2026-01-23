@@ -18,7 +18,7 @@ plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
 class Env:
-    def __init__(self):
+    def __init__(self, env_parser=env_parser):
         self.traj = []  # 存储所有agent的轨迹，traj[i]是第i个agent的轨迹列表
         self.render_frames = []  # 存储每一帧的渲染数据
 
