@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
@@ -26,9 +27,9 @@ import torch.nn as nn
 
 class Qnet(nn.Module):
     """
-    Q(s, a | fixed target)
+    Q(s, a | target)
 
-    target 是常数，不作为网络输入
+    target 通过 embedding 输入网络
     相对位置信息作为主干
     """
 
@@ -38,7 +39,6 @@ class Qnet(nn.Module):
         action_dim: int,
         x_dim: int,
         y_dim: int,
-        target_xy: tuple,          # (tx, ty)
         embedding_dim: int = 32,
         hidden_dim: int = 128,
     ):
@@ -47,14 +47,19 @@ class Qnet(nn.Module):
         self.x_dim = x_dim
         self.y_dim = y_dim
 
-        # ===== 固定 target（不参与训练）=====
-        target = torch.tensor(target_xy, dtype=torch.long)
-        self.register_buffer("target_xy", target)
-
         # ===== state embedding（辅助）=====
         self.embedding = nn.Embedding(state_num, embedding_dim)
 
+        # ===== target embedding =====
+        self.target_embedding = nn.Embedding(state_num, embedding_dim)
+
         self.abs_fc = nn.Sequential(
+            nn.Linear(embedding_dim, 64),
+            nn.ReLU(),
+        )
+
+        # ===== target embedding branch =====
+        self.target_fc = nn.Sequential(
             nn.Linear(embedding_dim, 64),
             nn.ReLU(),
         )
@@ -68,28 +73,33 @@ class Qnet(nn.Module):
         )
 
         # ===== fusion head =====
+        # 融合 state embedding, target embedding 和 relative position (64 + 64 + 64 = 192)
         self.head = nn.Sequential(
-            nn.Linear(128, hidden_dim),
+            nn.Linear(192, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, action_dim),
         )
 
-    def forward(self, state_idx: torch.Tensor):
+    def forward(self, state_idx: torch.Tensor, target_idx: torch.Tensor):
         """
         state_idx: (B,)
+        target_idx: (B,)
         """
 
         # ===== absolute state embedding =====
         state_emb = self.embedding(state_idx)
         h_abs = self.abs_fc(state_emb)
 
-        # ===== relative position to fixed target =====
+        # ===== target embedding =====
+        target_emb = self.target_embedding(target_idx)
+        h_target = self.target_fc(target_emb)
+
+        # ===== relative position to target =====
         sx = state_idx // self.y_dim
         sy = state_idx % self.y_dim
 
-        tx, ty = self.target_xy
-        tx = tx.expand_as(sx)
-        ty = ty.expand_as(sy)
+        tx = target_idx // self.y_dim
+        ty = target_idx % self.y_dim
 
         dx = (tx - sx).float()
         dy = (ty - sy).float()
@@ -114,7 +124,7 @@ class Qnet(nn.Module):
         h_rel = self.rel_fc(rel_feat)
 
         # ===== fusion =====
-        h = torch.cat([h_abs, h_rel], dim=1)
+        h = torch.cat([h_abs, h_target, h_rel], dim=1)
         q = self.head(h)
 
         return q
@@ -161,14 +171,10 @@ class DQN(Agent):
         
         # 初始化Q网络和目标Q网络
         state_num = env.state_num # 总状态数
-        # 获取第一个agent的target作为固定target（Qnet设计为固定target）
-        target_xy = env.target_states[0]  # (x, y) 元组
         self.qnet = Qnet(state_num = state_num, embedding_dim = 64, hidden_dim = hidden_dim, 
-                         action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim,
-                         target_xy = target_xy)
+                         action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim)
         self.target_qnet = Qnet(state_num = state_num, embedding_dim = 64, hidden_dim = hidden_dim, 
-                                action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim,
-                                target_xy = target_xy)
+                                action_dim = env.num_actions, x_dim = env.x_dim, y_dim = env.y_dim)
         self.target_qnet.load_state_dict(self.qnet.state_dict())
         self.target_qnet.eval()
         
@@ -213,17 +219,14 @@ class DQN(Agent):
         target = self.env.target_states[self.agent_id]
         if state == target:
             # 到达目标后保持不动，返回停留动作的索引
-            stay_action = (0, 0)
-            if stay_action in self.env.action_space:
-                return self.env.action_space.index(stay_action)
-            else:
-                return 0  # 默认返回第0个动作
+            return 0  # 默认返回第0个动作
         else:
             # 将 (x, y) 转换为 state_idx: state_idx = x * y_dim + y
             state_idx_tensor = self._state_to_idx_tensor(state)
+            target_idx_tensor = self._state_to_idx_tensor(target)
             
             with torch.no_grad():
-                action_values = self.qnet(state_idx_tensor)
+                action_values = self.qnet(state_idx_tensor, target_idx_tensor)
             
             # 获取最优动作
             optimal_action = action_values.argmax(dim=1).item()
@@ -257,17 +260,18 @@ class DQN(Agent):
 
         state_idx = self._state_to_idx_tensor(states)
         next_state_idx = self._state_to_idx_tensor(next_states)
+        target_idx = self._state_to_idx_tensor(targets)
 
         action_tensor = torch.tensor(actions, dtype=torch.long, device=self.device)
         reward_tensor = torch.tensor(rewards, device=self.device)
 
-        q = self.qnet(state_idx)
+        q = self.qnet(state_idx, target_idx)
         q = q.gather(1, action_tensor.unsqueeze(1)).squeeze(1)
 
         with torch.no_grad():
-            next_q = self.target_qnet(next_state_idx)
+            next_q = self.target_qnet(next_state_idx, target_idx)
             max_next_q = next_q.max(dim=1)[0]
-            td_target = reward_tensor + self.gamma * max_next_q
+            td_target = reward_tensor + self.gamma * max_next_q * (1 - dones)
 
         loss = self.loss_fn(q, td_target)
 
@@ -276,13 +280,13 @@ class DQN(Agent):
         self.optimizer.step()
 
         return loss.item()
-
     
     def update_target_qnet(self):
         """同步目标Q网络参数"""
         self.target_qnet.load_state_dict(self.qnet.state_dict())
     
     def train(self):
+        # Train one robot is allowed
         print(f"Begin to train DQN, iteration: {self.iteration}")
         epsilon = self.epsilon
         for i in range(self.iteration):
@@ -357,6 +361,7 @@ class DQN(Agent):
         self.target_qnet.load_state_dict(checkpoint.get("target_qnet", checkpoint["qnet"]))
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.epsilon = checkpoint.get("epsilon", self.epsilon)
+
 
 if __name__ == "__main__":
     env = Env()
