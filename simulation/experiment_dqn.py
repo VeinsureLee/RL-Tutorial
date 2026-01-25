@@ -112,7 +112,7 @@ def main():
     
     # 创建DQN Agent并加载预训练权重
     print("\n加载预训练的DQN模型...")
-    model_path = os.path.join("models", "dqn_model.pth")
+    model_path = os.path.join("models", "dqn_model_test.pth")
     fallback_model_path = os.path.join("models", "dqn_model")
     dqn = DQN(env, lr=0.001, gamma=0.99, epsilon=1.0, epsilon_min=0.01, 
               epsilon_decay=0.995, batch_size=64, mini_batch_size=32, hidden_dim=128, 
@@ -152,7 +152,7 @@ def main():
     os.makedirs("results", exist_ok=True)
     gif_path = os.path.join("results", "dqn_pretrained_test.gif")
     try:
-        env.render_animation(interval=1, save_path=gif_path)
+        env.render_animation(interval=1, save_path=None)
         print("保存成功")
     except Exception as e:
         print(f"动画渲染出错: {e}")
