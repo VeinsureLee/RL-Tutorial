@@ -126,8 +126,8 @@ def main():
     
     # 创建DQN Agent并加载预训练权重
     print("\n加载预训练的DQN模型...")
-    model_path = os.path.join("models", "dqn_model.pth")
-    fallback_model_path = os.path.join("models", "dqn_model.pth")
+    model_path = os.path.join("models", "dqn_model_test.pth")
+    fallback_model_path = os.path.join("models", "dqn_model_test.pth")
     dqn = DQN(env, agent_id=0, lr=0.001, gamma=0.99, iteration=10,
               epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995,
               num_episodes=50, episode_length=2000, batch_size=64, 

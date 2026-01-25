@@ -156,7 +156,7 @@ def main():
     
     # 创建MADQN Agent并加载预训练权重
     print("\n加载预训练的MADQN模型...")
-    model_path = os.path.join("models", "madqn_model_test.pth")
+    model_path = os.path.join("models", "madqn_model_test04.pth")
     fallback_model_path = os.path.join("models", "madqn_model.pth")
     
     madqn = MADQN(
@@ -213,7 +213,7 @@ def main():
     # 渲染动画并保存
     print("\n渲染动画...")
     os.makedirs("results", exist_ok=True)
-    gif_path = os.path.join("results", "madqn_pretrained_test.gif")
+    gif_path = os.path.join("results", "madqn_pretrained_test04.gif")
     try:
         env.render_animation(interval=1, save_path=gif_path)
         print("保存成功")

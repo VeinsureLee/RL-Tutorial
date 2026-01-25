@@ -357,4 +357,5 @@ if __name__ == "__main__":
             )
 
     dqn = train_dqn(env, dqn)
-    dqn.save("models/dqn_model.pth")
+    save_path = os.path.join("models", "dqn_model.pth")
+    dqn.save(save_path)
