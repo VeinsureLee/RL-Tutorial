@@ -21,6 +21,10 @@ def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
     :return: 是否所有agent都到达目标
     """
     states, _ = env.reset()
+    # 处理单个 agent 的情况（向后兼容）
+    if env.num_agents == 1:
+        states = [states]
+    
     if verbose:
         print(f"Agent数量: {env.num_agents}")
         print(f"初始状态: {states}")
@@ -34,27 +38,12 @@ def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
     for step in range(max_steps):
         # 使用MADQN选择动作
         if isinstance(agent, MADQN):
-            # 确保states是列表
-            if not isinstance(states, list):
-                states = [states]
-            
-            # 获取所有agent的id
-            agent_ids = list(range(env.num_agents))
-            
             # 使用MADQN的take_action方法（支持多agent）
-            action_indices = agent.take_action(states, agent_ids, training=training)
-            
-            # 确保action_indices是列表
-            if not isinstance(action_indices, list):
-                action_indices = [action_indices]
+            # take_action 接受 states 列表，返回 action_indices 列表
+            action_indices = agent.take_action(states, training=training)
             
             # 将索引转换为环境动作
-            actions = []
-            for action_idx in action_indices:
-                if isinstance(action_idx, (int, np.integer)) and 0 <= action_idx < env.num_actions:
-                    actions.append(env.action_space[action_idx])
-                else:
-                    actions.append(action_idx)
+            actions = [env.action_space[action_idx] for action_idx in action_indices]
         else:
             # 兼容其他类型的agent
             actions = agent.select_action(states, training=training)
@@ -79,13 +68,13 @@ def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
                     actions = [random.choice(env.action_space) for _ in range(env.num_agents)]
         
         # 执行动作
-        next_states, rewards, dones, _ = env.step(actions)
-        # 兼容单agent返回标量的情况
-        if not isinstance(next_states, list):
+        step_result = env.step(actions)
+        next_states, rewards, dones, _ = step_result
+        
+        # 处理单个 agent 的情况（向后兼容）
+        if env.num_agents == 1:
             next_states = [next_states]
-        if not isinstance(rewards, list):
             rewards = [rewards]
-        if not isinstance(dones, list):
             dones = [dones]
         
         # run_with_agent 主要用于评估阶段，训练请使用专用训练流程
@@ -128,35 +117,35 @@ def train_madqn_model():
         env,
         lr=0.001,
         gamma=0.99,
-        iteration=5,
         epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.95,
-        num_episodes=50,
-        episode_length=4000,
+        epsilon_min=0.1,
+        epsilon_decay=0.9,
+        num_episodes=5,
+        episode_length=35000,
+        iteration=5,
         batch_size=64,
-        mini_batch_size=32,
+        mini_batch_size=64,
         hidden_dim=128,
         update_freq=10
     )
     
     # 训练模型
     print("\n开始训练...")
-    train_madqn(madqn)
+    madqn, return_list, agent_return_lists = train_madqn(env, madqn)
     
     # 保存模型
     print("\n保存模型...")
     os.makedirs("models", exist_ok=True)
-    model_path = os.path.join("models", "madqn_model.pth")
+    model_path = os.path.join("models", "madqn_model_test.pth")
     madqn.save(model_path)
     print(f"模型已保存到: {model_path}")
     
-    return madqn
+    return madqn, return_list, agent_return_lists
 
 
-def test_madqn_model():
+def main():
     """
-    测试预训练的MADQN模型
+    主函数：创建环境和Agent，运行Agent策略并渲染
     """
     print("=" * 50)
     print("MADQN预训练模型测试与可视化")
@@ -167,21 +156,21 @@ def test_madqn_model():
     
     # 创建MADQN Agent并加载预训练权重
     print("\n加载预训练的MADQN模型...")
-    model_path = os.path.join("models", "models/madqn_model.pth")
-    fallback_model_path = os.path.join("models", "models/madqn_model")
+    model_path = os.path.join("models", "madqn_model_test.pth")
+    fallback_model_path = os.path.join("models", "madqn_model.pth")
     
     madqn = MADQN(
         env,
         lr=0.001,
         gamma=0.99,
-        iteration=5,
         epsilon=1.0,
-        epsilon_min=0.01,
-        epsilon_decay=0.95,
-        num_episodes=50,
-        episode_length=4000,
+        epsilon_min=0.1,
+        epsilon_decay=0.9,
+        num_episodes=5,
+        episode_length=35000,
+        iteration=5,
         batch_size=64,
-        mini_batch_size=32,
+        mini_batch_size=64,
         hidden_dim=128,
         update_freq=10
     )
@@ -195,13 +184,17 @@ def test_madqn_model():
             model_path = fallback_model_path
             print(f"已加载模型: {fallback_model_path}")
         except FileNotFoundError:
-            print(f"未找到预训练模型文件，请将文件放在 {model_path} 或 {fallback_model_path}")
-            print("提示：可以运行 train_madqn_model() 来训练模型")
-            return None
+            print(f"未找到预训练模型文件: {model_path} 或 {fallback_model_path}")
+            print("开始训练新模型...")
+            # 如果找不到模型，先训练
+            madqn, return_list, agent_return_lists = train_madqn(env, madqn)
+            # 训练完成后保存模型
+            os.makedirs("models", exist_ok=True)
+            madqn.save(model_path)
+            print(f"模型已保存到: {model_path}")
     
     # 使用训练好的策略（设置epsilon为最小值）
-    for agent_id in range(madqn.num_agents):
-        madqn.epsilons[agent_id] = madqn.epsilon_min
+    madqn.epsilon = madqn.epsilon_min
     
     print("\n" + "=" * 50)
     print(f"测试预训练的MADQN模型（{env.num_agents}个机器人）")
@@ -223,55 +216,13 @@ def test_madqn_model():
     gif_path = os.path.join("results", "madqn_pretrained_test.gif")
     try:
         env.render_animation(interval=1, save_path=gif_path)
-        print(f"动画已保存到: {gif_path}")
+        print("保存成功")
     except Exception as e:
         print(f"动画渲染出错: {e}")
         print("尝试使用静态渲染模式")
         env.render(mode='human')
     
     print("\n渲染完成！")
-    
-    return madqn
-
-
-def main():
-    """
-    主函数：可以选择训练或测试MADQN模型
-    """
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='MADQN实验脚本')
-    parser.add_argument('--mode', type=str, default='test', choices=['train', 'test', 'both'],
-                        help='运行模式: train(训练), test(测试), both(训练后测试)')
-    args = parser.parse_args()
-    
-    if args.mode == 'train':
-        train_madqn_model()
-    elif args.mode == 'test':
-        test_madqn_model()
-    elif args.mode == 'both':
-        madqn = train_madqn_model()
-        if madqn is not None:
-            # 重新创建环境用于测试
-            env = Env()
-            # 设置epsilon为最小值用于测试
-            for agent_id in range(madqn.num_agents):
-                madqn.epsilons[agent_id] = madqn.epsilon_min
-            
-            print("\n" + "=" * 50)
-            print("训练完成后立即测试")
-            print("=" * 50)
-            run_with_agent(env, madqn, max_steps=2000, training=False, verbose=True)
-            
-            # 渲染
-            print("\n渲染动画...")
-            os.makedirs("results", exist_ok=True)
-            gif_path = os.path.join("results", "madqn_trained_test.gif")
-            try:
-                env.render_animation(interval=1, save_path=gif_path)
-                print(f"动画已保存到: {gif_path}")
-            except Exception as e:
-                print(f"动画渲染出错: {e}")
 
 
 if __name__ == '__main__':
