@@ -47,11 +47,8 @@ class Qnet(nn.Module):
         self.x_dim = x_dim
         self.y_dim = y_dim
 
-        # ===== state embedding（辅助）=====
+        # ===== state embedding =====
         self.embedding = nn.Embedding(state_num, embedding_dim)
-
-        # ===== target embedding =====
-        self.target_embedding = nn.Embedding(state_num, embedding_dim)
 
         self.abs_fc = nn.Sequential(
             nn.Linear(embedding_dim, 64),
@@ -91,7 +88,7 @@ class Qnet(nn.Module):
         h_abs = self.abs_fc(state_emb)
 
         # ===== target embedding =====
-        target_emb = self.target_embedding(target_idx)
+        target_emb = self.embedding(target_idx)
         h_target = self.target_fc(target_emb)
 
         # ===== relative position to target =====
@@ -137,8 +134,8 @@ class ReplayBuffer:
     def __init__(self, max_size):
         self.buffer = deque(maxlen = max_size)
         
-    def add(self,agent_id, state, action, reward, next_state, done, target):
-        self.buffer.append((agent_id, state, action, reward, next_state, done, target))
+    def add(self, state, action, reward, next_state, done):
+        self.buffer.append((state, action, reward, next_state, done))
         
     def sample(self, batch_size):
         return random.sample(self.buffer, batch_size)
@@ -250,20 +247,22 @@ class DQN(Agent):
     def update(self):
         batch = self.buffer.sample(self.mini_batch_size)
 
-        agent_ids = np.array([b[0] for b in batch])
-        states = np.array([b[1] for b in batch])
-        actions = np.array([b[2] for b in batch])
-        rewards = np.array([b[3] for b in batch], dtype=np.float32)
-        next_states = np.array([b[4] for b in batch])
-        dones = np.array([b[5] for b in batch], dtype=np.float32)
-        targets = np.array([b[6] for b in batch])
+        states = np.array([b[0] for b in batch])
+        actions = np.array([b[1] for b in batch])
+        rewards = np.array([b[2] for b in batch], dtype=np.float32)
+        next_states = np.array([b[3] for b in batch])
+        dones = np.array([b[4] for b in batch], dtype=np.float32)
 
         state_idx = self._state_to_idx_tensor(states)
         next_state_idx = self._state_to_idx_tensor(next_states)
-        target_idx = self._state_to_idx_tensor(targets)
 
         action_tensor = torch.tensor(actions, dtype=torch.long, device=self.device)
         reward_tensor = torch.tensor(rewards, device=self.device)
+
+        # 将 target 转换为 tensor，并扩展到 batch 大小
+        target = self.env.target_states[self.agent_id]
+        target_idx_single = self._state_to_idx_tensor(target)
+        target_idx = target_idx_single.repeat(len(batch))
 
         q = self.qnet(state_idx, target_idx)
         q = q.gather(1, action_tensor.unsqueeze(1)).squeeze(1)
@@ -284,64 +283,6 @@ class DQN(Agent):
     def update_target_qnet(self):
         """同步目标Q网络参数"""
         self.target_qnet.load_state_dict(self.qnet.state_dict())
-    
-    def train(self):
-        # Train one robot is allowed
-        print(f"Begin to train DQN, iteration: {self.iteration}")
-        epsilon = self.epsilon
-        for i in range(self.iteration):
-            self.epsilon = epsilon
-            # 使用tqdm创建进度条
-            pbar = tqdm(range(1, self.num_episodes + 1), desc=f"Iteration({i+1}) progress".format(i+1), unit="episode")
-            
-            for ep in pbar:
-                states, _ = self.env.reset()
-                state = states[self.agent_id]
-                target = self.env.target_states[self.agent_id]
-
-                ep_return = 0
-
-                for t in range(self.episode_length):
-                    action_idx = self.take_action(state, training=True)
-                    action = self.env.action_space[action_idx]
-
-                    next_state, reward, done, _ = self.env.step(action)
-
-                    ep_return += reward
-
-                    self.buffer.add(
-                        self.agent_id,
-                        state,
-                        action_idx,
-                        reward,
-                        next_state,
-                        done,
-                        target
-                    )
-
-                    if len(self.buffer) >= self.mini_batch_size:
-                        self.update()
-
-                    state = next_state
-
-                    if t % self.update_freq == 0:
-                        self.update_target_qnet()
-
-                    if done:
-                        break
-
-                # epsilon **按 episode 衰减**
-                self.epsilon = max(
-                    self.epsilon_min,
-                    self.epsilon * self.epsilon_decay
-                )
-
-                # 更新进度条显示信息
-                pbar.set_postfix({
-                    'Episode': ep,
-                    'Return': f'{ep_return:.2f}',
-                    'Epsilon': f'{self.epsilon:.3f}'
-                })
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -363,6 +304,41 @@ class DQN(Agent):
         self.epsilon = checkpoint.get("epsilon", self.epsilon)
 
 
+def train_dqn(env, dqn):
+    print(f"Begin to train DQN, iteration: {dqn.iteration}")
+    epsilon = dqn.epsilon
+    for i in range(dqn.iteration):
+        dqn.epsilon = epsilon
+        # 使用tqdm创建进度条
+        pbar = tqdm(range(1, dqn.num_episodes + 1),
+                    desc=f"Iteration({i+1}) progress".format(i+1), unit="episode")
+        for ep in pbar:
+            states, _ = env.reset()
+            state = states[dqn.agent_id]
+            ep_return = 0
+            for t in range(dqn.episode_length):
+                action_idx = dqn.take_action(state, training=True)
+                action = env.action_space[action_idx]
+                next_state, reward, done, _ = env.step(action)
+                ep_return += reward
+                dqn.buffer.add(state, action_idx, reward, next_state, done)
+                if len(dqn.buffer) >= dqn.mini_batch_size:
+                    dqn.update()
+                state = next_state
+                if t % dqn.update_freq == 0:
+                    dqn.update_target_qnet()
+                if done:
+                    break
+            # epsilon **按 episode 衰减**
+            dqn.epsilon = max(dqn.epsilon_min, dqn.epsilon * dqn.epsilon_decay)
+            pbar.set_postfix({
+                'Episode': ep,
+                'Return': f'{ep_return:.2f}',
+                'Epsilon': f'{dqn.epsilon:.3f}'
+            })
+    return dqn
+
+
 if __name__ == "__main__":
     env = Env()
     dqn =DQN(
@@ -380,5 +356,5 @@ if __name__ == "__main__":
                 update_freq=10
             )
 
-    dqn.train()
+    dqn = train_dqn(env, dqn)
     dqn.save("models/dqn_model.pth")
