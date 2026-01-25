@@ -64,4 +64,5 @@ def visualize_map_with_agents(map_size, forbidden_areas, start_states, target_st
 
 # 可视化
 visualize_map_with_agents(map_size, forbidden_areas, start_states, target_states)
-
+print(start_states)
+print(target_states)

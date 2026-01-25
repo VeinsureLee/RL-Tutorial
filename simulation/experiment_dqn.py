@@ -32,18 +32,32 @@ def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
     
     action_names = {(0, 1): "下", (1, 0): "右", (0, -1): "上", (-1, 0): "左", (0, 0): "停留"}
     
+    # 对于DQN，确保agent_id已设置
+    if isinstance(agent, DQN):
+        if agent.agent_id is None:
+            agent.agent_id = 0
+        if env.num_agents > 1:
+            print(f"警告: DQN是为单agent设计的，当前环境有{env.num_agents}个agent，将只使用agent_id={agent.agent_id}")
+    
     for step in range(max_steps):
         # 使用agent选择动作
         if isinstance(agent, DQN):
-            actions = []
-            for agent_id in range(env.num_agents):
-                state_i = states[agent_id] if isinstance(states, list) else states
-                action_idx = agent.take_action(state_i, training=training)
-                # 将索引转换为环境动作
-                if isinstance(action_idx, (int, np.integer)) and 0 <= action_idx < env.num_actions:
-                    actions.append(env.action_space[action_idx])
-                else:
-                    actions.append(action_idx)
+            # DQN是为单agent设计的，只处理agent_id对应的agent
+            agent_id = agent.agent_id if agent.agent_id is not None else 0
+            state_i = states[agent_id] if isinstance(states, list) else states
+            action_idx = agent.take_action(state_i, training=training)
+            # 将索引转换为环境动作
+            if isinstance(action_idx, (int, np.integer)) and 0 <= action_idx < env.num_actions:
+                action = env.action_space[action_idx]
+            else:
+                action = action_idx
+            
+            # 对于多agent环境，其他agent保持不动（使用停留动作）
+            if env.num_agents > 1:
+                actions = [(0, 0) for _ in range(env.num_agents)]
+                actions[agent_id] = action
+            else:
+                actions = [action]
         else:
             actions = agent.select_action(states, training=training)
             
@@ -112,11 +126,12 @@ def main():
     
     # 创建DQN Agent并加载预训练权重
     print("\n加载预训练的DQN模型...")
-    model_path = os.path.join("models", "dqn_model_test.pth")
-    fallback_model_path = os.path.join("models", "dqn_model")
-    dqn = DQN(env, lr=0.001, gamma=0.99, epsilon=1.0, epsilon_min=0.01, 
-              epsilon_decay=0.995, batch_size=64, mini_batch_size=32, hidden_dim=128, 
-              num_episodes=50, episode_length=2000, update_freq=50)
+    model_path = os.path.join("models", "dqn_model.pth")
+    fallback_model_path = os.path.join("models", "dqn_model.pth")
+    dqn = DQN(env, agent_id=0, lr=0.001, gamma=0.99, iteration=10,
+              epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995,
+              num_episodes=50, episode_length=2000, batch_size=64, 
+              mini_batch_size=32, hidden_dim=128, update_freq=50)
 
     try:
         dqn.load(model_path)
