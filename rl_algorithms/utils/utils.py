@@ -139,3 +139,25 @@ def calculate_distance(state_idx, targets_idx, y_dim=10, x_dim=10, device='cpu')
         'sign_dx': sign_dx,
         'sign_dy': sign_dy,
     }
+
+
+if __name__ == "__main__":
+    state_test = torch.tensor([(1, 2)])
+    state_test_idx = state_to_idx_tensor(state_test, 10, 'cpu')
+    print(state_test_idx)
+    state_idx_test = torch.tensor([12, 13, 14])
+    state_test = idx_tensor_to_state(state_idx_test, 10)
+    print(state_test)
+    state_idx_test = torch.tensor([12])
+    targets_idx_test = torch.tensor([13, 14, 15])
+    distance_info = calculate_distance(state_idx_test, targets_idx_test)
+    print("State idx:", distance_info['state_idx'])
+    print("Targets idx:", distance_info['targets_idx'])
+    print("State coord:", distance_info['state_coord'])
+    print("Targets coord:", distance_info['targets_coord'])
+    print("L1 distance:", distance_info['l1'])
+    print("L2 distance:", distance_info['l2'])
+    print("All distance features:")
+    for key, value in distance_info.items():
+        if key not in ['state_idx', 'targets_idx', 'state_coord', 'targets_coord']:
+            print(f"  {key}: {value}")

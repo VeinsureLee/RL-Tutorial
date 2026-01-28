@@ -7,7 +7,7 @@ import random
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from env.env import Env
-from rl_algorithms.agent import Agent
+from rl_algorithms.utils.agent import Agent
 from rl_algorithms.dqn import DQN
 
 
