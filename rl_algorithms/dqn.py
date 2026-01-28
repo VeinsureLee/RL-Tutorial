@@ -73,7 +73,7 @@ class DQN(Agent):
         if self.agent_id is None:
             self.agent_id = 0
         target = self.env.target_states[self.agent_id]
-        if state == target:
+        if np.array_equal(state, target):
             # 到达目标后保持不动，返回停留动作的索引
             return 0  # 默认返回第0个动作
         else:
@@ -177,12 +177,16 @@ def train_dqn(env, dqn):
                     desc=f"Iteration({i+1}) progress".format(i+1), unit="episode")
         for ep in pbar:
             states, _ = env.reset()
-            state = states[dqn.agent_id]
+            # 单 agent 时 env.reset() 返回 (x,y)，多 agent 时返回 list，需统一为单 agent 的 state
+            state = states if env.num_agents == 1 else states[dqn.agent_id]
             ep_return = 0
             for t in range(dqn.episode_length):
                 action_idx = dqn.take_action(state, training=True)
                 action = env.action_space[action_idx]
-                next_state, reward, done, _ = env.step(action)
+                next_list, rewards, dones, _ = env.step(action)
+                reward = rewards[dqn.agent_id]
+                done = dones[dqn.agent_id]
+                next_state = next_list[dqn.agent_id]
                 ep_return += reward
                 dqn.buffer.add(state, action_idx, reward, next_state, done)
                 if len(dqn.buffer) >= dqn.mini_batch_size:

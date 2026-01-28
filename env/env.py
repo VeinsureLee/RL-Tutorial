@@ -186,7 +186,6 @@ class Env:
         next_list = [tuple(s.tolist()) for s in next_states]
         return next_list, rewards.tolist(), dones.tolist(), {}
 
-    
     def render(self, mode='human', save_path=None):
         """
         渲染环境，显示agent的移动轨迹
@@ -411,3 +410,15 @@ class Env:
         plt.show()
         
         return anim
+
+
+if __name__ == "__main__":
+    env = Env()
+    env.reset()
+    print(len(env.forbidden_states))
+    print(env.forbidden_states)
+    print("after reset", env.agent_states)
+    print("after reset", len(env.traj[0]))
+    env.step([(1, 0), (0, 1), (0, -1), (-1, 0)])
+    print("after step", env.agent_states)
+    print("after step", len(env.traj[0]))
