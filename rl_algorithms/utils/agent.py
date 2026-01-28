@@ -35,7 +35,7 @@ class Agent:
         :return: action value估计
         """
         target = self.env.target_states[agent_id]
-        if state == target:
+        if tuple(state) == tuple(target):
             return (0, 0)
         else:
             return random.choice(self.env.action_space)
