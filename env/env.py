@@ -462,3 +462,15 @@ class Env:
         plt.show()
         
         return anim
+
+
+if __name__ == "__main__":
+    env = Env()
+    env.reset()
+    print(len(env.forbidden_states))
+    print(env.forbidden_states)
+    print("after reset", env.agent_states)
+    print("after reset", len(env.traj[0]))
+    env.step([(1, 0), (0, 1), (0, -1), (-1, 0)])
+    print("after step", env.agent_states)
+    print("after step", len(env.traj[0]))
