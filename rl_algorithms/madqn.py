@@ -356,11 +356,11 @@ if __name__ == "__main__":
         lr=1e-3,
         gamma=0.99,
         iteration=5,
-        epsilon=0.8,
+        epsilon=0.5,
         epsilon_decay=0.95,   # 按 episode
         epsilon_min=0.1,
         num_episodes=50,
-        episode_length=35000,
+        episode_length=5000,
         mini_batch_size=64,
         update_freq=10
     )

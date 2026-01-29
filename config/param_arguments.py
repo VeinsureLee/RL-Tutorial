@@ -34,6 +34,11 @@ parser.add_argument("--packet_size", type=int, default=16)
 
 # specify the number of robots
 parser.add_argument("--number_of_robots", type=int, default=4)
+
+# 总发射功率（瓦特），用于 NOMA 功率分配
+parser.add_argument("--total_power", type=float, default=1.0)
+# SIC 所需最小功率差 rho_min（瓦特），满足 (P2-P1)*g1 >= rho_min
+parser.add_argument("--rho_min", type=float, default=0.01)
 ## ==================== End of User settings ====================
 
 

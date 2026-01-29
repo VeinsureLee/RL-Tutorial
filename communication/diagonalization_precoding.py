@@ -26,10 +26,14 @@ def matrix_cal(cluster_list, m):
 
     H_tilde = []
     for i, cluster in enumerate(cluster_list):
-        if i != m:
+        if i != m and cluster.size > 0:
             H_tilde.append(cluster)
 
-    H_tilde = np.vstack(H_tilde)
+    if len(H_tilde) == 0:
+        # 其他簇均为空时，无干扰，整个空间为有效空间
+        H_tilde = np.zeros((0, cluster_list[m].shape[1]))
+    else:
+        H_tilde = np.vstack(H_tilde)
 
     U_t, S_t, Vh_t = np.linalg.svd(H_tilde, full_matrices=True)
     V_t = Vh_t.conj().T

@@ -1,15 +1,121 @@
 import sys
 import os
 import numpy as np
-from channel import *
-from diagonalization_precoding import *
-from SIC import *
+from channel import channel_parameter, channel_vector, channel_group, number_of_antenna, path_loss
+from diagonalization_precoding import matrix_cal
+from SIC import compute_sinr, epsilon, allocate_power, ber_to_reward
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from env.env import Env
-from rl_algorithms.agent import Agent
+from config.param_arguments import parser as param_parser
+
+try:
+    from env.env import Env
+except ImportError:
+    Env = None
+
+
+def get_ber_reward(agent_states, grid_size, antenna_position, total_power=None):
+    """
+    根据当前 agent 网格位置计算信道、功率分配与误码率，返回每个 agent 的 BER reward（-log(ber)）。
+    :param agent_states: 列表，每个元素为 (grid_x, grid_y) 网格坐标
+    :param grid_size: 网格对应的物理尺寸
+    :param antenna_position: 基站天线位置 (x, y)，与地图同一坐标尺度
+    :param total_power: 总发射功率 (W)，None 则从 config 读取
+    :return: (rewards_ber, ber_per_agent)，分别为 -log(ber) 列表与误码率列表
+    """
+    if total_power is None:
+        total_power = param_parser.parse_args().total_power
+
+    num_agents = len(agent_states)
+    if num_agents == 0:
+        return [], []
+
+    # 网格坐标 -> 物理坐标，并计算到基站距离
+    positions = np.array([
+        [float(s[0]) * grid_size, float(s[1]) * grid_size] for s in agent_states
+    ], dtype=np.float64)
+    antenna = np.asarray(antenna_position, dtype=np.float64).reshape(2,)
+    distances = np.linalg.norm(positions - antenna, axis=1)
+    distances = np.maximum(distances, 1e-3)  # 避免 log10(0)
+
+    # 信道：全部 LOS；角度随机（与位置相关可用 np.arctan2）
+    models = ["LOS"] * num_agents
+    thetas = np.arctan2(
+        positions[:, 1] - antenna[1],
+        positions[:, 0] - antenna[0]
+    )
+    thetas = np.clip(thetas, -np.pi, np.pi)
+
+    chn_paras = channel_parameter(distances, models=models)
+    chn_vcts = channel_vector(chn_paras, thetas)
+    groups = channel_group(chn_vcts)
+
+    cluster_list = [
+        groups['cluster1']['vectors'],
+        groups['cluster2']['vectors'],
+        groups['cluster3']['vectors']
+    ]
+    cluster_indices = [
+        groups['cluster1']['indices'],
+        groups['cluster2']['indices'],
+        groups['cluster3']['indices']
+    ]
+
+    # 每个 agent 的误码率，先初始化为默认（单用户或未分配时使用）
+    ber_per_agent = np.ones(num_agents) * 0.5  # 默认 0.5，reward 为 -log(0.5)
+
+    for m, H_m in enumerate(cluster_list):
+        if H_m.size == 0:
+            continue
+
+        w_m = matrix_cal(cluster_list, m)
+        if w_m.shape[1] == 0:
+            continue
+
+        w = w_m[:, 0].copy()
+        w_norm = np.linalg.norm(w)
+        if w_norm < 1e-12:
+            continue
+        w = w / w_norm
+
+        eff_gains = np.abs(H_m @ w) ** 2
+        sorted_local = np.argsort(eff_gains)[::-1]
+        n_in_cluster = H_m.shape[0]
+        agent_idx_in_cluster = cluster_indices[m]
+
+        if n_in_cluster == 1:
+            g1 = eff_gains[sorted_local[0]]
+            try:
+                from utils import dbm2watt
+                sigma = dbm2watt(param_parser.parse_args().power_AWGN)
+            except Exception:
+                sigma = 1e-12
+            sigma = max(sigma, 1e-12)
+            sinr_1 = (total_power * g1) / sigma
+            ber_1 = epsilon(sinr_1)
+            ber_per_agent[agent_idx_in_cluster[0]] = ber_1
+            continue
+
+        h_strong = H_m[sorted_local[0], :]
+        h_weak = H_m[sorted_local[1], :]
+        g_strong = np.abs(h_strong @ w) ** 2
+        g_weak = np.abs(h_weak @ w) ** 2
+        P1, P2 = allocate_power(total_power, g_strong, g_weak)
+        sinr_1, sinr_2 = compute_sinr(h_strong, h_weak, w, P1, P2)
+        ber_strong = epsilon(sinr_1)
+        ber_weak = epsilon(sinr_2)
+
+        # 簇内按有效增益排序：强用户(前一半)用 ber_strong，弱用户(后一半)用 ber_weak
+        half = (n_in_cluster + 1) // 2
+        for rank, local_i in enumerate(sorted_local):
+            global_agent_id = agent_idx_in_cluster[local_i]
+            ber_per_agent[global_agent_id] = ber_strong if rank < half else ber_weak
+
+    rewards_ber = [ber_to_reward(ber_per_agent[i]) for i in range(num_agents)]
+    ber_list = [float(ber_per_agent[i]) for i in range(num_agents)]
+    return rewards_ber, ber_list
 
 
 def test_channel():
@@ -167,8 +273,6 @@ def test_sic():
 
         print(f"SINR strong user : {10 * np.log10(sinr_1):.2f} dB")
         print(f"SINR weak user   : {10 * np.log10(sinr_2):.2f} dB")
-
-
 
 
 if __name__ == '__main__':
