@@ -27,7 +27,7 @@ class MADQN(Agent):
                  epsilon=1.0, epsilon_min=0.1, epsilon_decay=0.9,
                  num_episodes=5, episode_length=35000,
                  iteration=5, batch_size=64, mini_batch_size=64,
-                 hidden_dim=128, update_freq=10):
+                 hidden_dim=128, update_freq=10, device=torch.device("cpu")):
         super().__init__(env=env,
                          lr=lr, gamma=gamma,
                          epsilon=epsilon, epsilon_min=epsilon_min,
@@ -65,7 +65,7 @@ class MADQN(Agent):
         self.loss_fn = nn.MSELoss()
 
         # 初始化设备
-        self.device = torch.device("cpu")
+        self.device = device
         for i in range(self.num_agents):
             self.q_nets[i].to(self.device)
             self.target_q_nets[i].to(self.device)
