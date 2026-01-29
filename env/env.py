@@ -69,6 +69,7 @@ class Env:
         self.reward_target = args.reward_target
         self.reward_forbidden = args.reward_forbidden
         self.reward_step = args.reward_step
+        self.reward_closer_to_target = args.reward_closer_to_target
 
     def _continuous_to_discrete(self, state):
         """
@@ -213,7 +214,15 @@ class Env:
             reward = self.reward_forbidden
         else:
             reward = self.reward_step
-
+        
+        # 如果新位置比原位置更靠近目标，reward加1
+        if isinstance(target_state, (list, tuple)):
+            target_x, target_y = int(target_state[0]), int(target_state[1])
+            old_dist = abs(x - target_x) + abs(y - target_y)
+            new_dist = abs(new_x - target_x) + abs(new_y - target_y)
+            if new_dist < old_dist:
+                reward += self.reward_closer_to_target
+                
         # 确保返回的是整数坐标
         return (int(new_x), int(new_y)), reward
 

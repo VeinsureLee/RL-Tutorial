@@ -215,7 +215,7 @@ def main():
     os.makedirs("results", exist_ok=True)
     gif_path = os.path.join("results", "madqn_pretrained_test04.gif")
     try:
-        env.render_animation(interval=1, save_path=None)
+        env.render_animation(interval=1, save_path=gif_path)
         print("保存成功")
     except Exception as e:
         print(f"动画渲染出错: {e}")

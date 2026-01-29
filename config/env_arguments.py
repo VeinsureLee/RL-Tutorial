@@ -48,6 +48,10 @@ env_parser.add_argument("--reward-forbidden", type=float,
 # specify the reward for each step
 env_parser.add_argument("--reward-step", type=float,
                         default=-1)
+
+# specify the reward for each step closer to target
+env_parser.add_argument("--reward-closer-to-target", type=float,
+                        default=1)
 ## ==================== End of User settings ====================
 
 
