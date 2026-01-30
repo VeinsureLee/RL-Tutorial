@@ -1,1 +1,1 @@
-from channel import *
+from .channel import *

@@ -7,6 +7,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from config.env_arguments import env_parser
+from config.map_config import (
+    los_nlos_grid,
+    get_los_nlos as _map_get_los_nlos,
+    map_size as map_config_map_size,
+)
+from config.param_arguments import parser as param_parser
+from communication.main import get_ber_reward
 from PIL import Image
 import io
 from tqdm import tqdm
@@ -60,6 +67,10 @@ class Env:
         self.target_state = self.target_states[0] if len(self.target_states) > 0 else None
             
         self.forbidden_states = self._process_forbidden_states(args.forbidden_areas)
+
+        # 地图 LOS/NLOS 信息（来自 map_config 的离散化网格）
+        self._los_nlos_grid = los_nlos_grid
+        self._map_config_map_size = tuple(map_config_map_size)  # (rows, cols)
 
         # 所有agent的当前状态
         self.agent_states = self.start_states.copy()
@@ -170,12 +181,25 @@ class Env:
             next_states.append(next_state)
             rewards.append(reward)
             dones.append(done)
-        
+
+        # 根据 next_states 计算每个 agent 的 LOS/NLOS、分簇、功率分配与误码率，误码率放入 info
+        antenna_position = param_parser.parse_args().antenna_position
+        try:
+            _, ber_per_agent, sinr_per_agent = get_ber_reward(
+                next_states,
+                self.grid_size,
+                antenna_position,
+                get_los_nlos=self.get_los_nlos,
+            )
+            info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": sinr_per_agent}
+        except Exception:
+            info = {"ber": [0.5] * self.num_agents, "ber_per_agent": [0.5] * self.num_agents, "sinr": [float("nan")] * self.num_agents}
+
         # 如果只有一个agent，返回单个值（向后兼容）
         if self.num_agents == 1:
-            return next_states[0], rewards[0], dones[0], {}
+            return next_states[0], rewards[0], dones[0], info
         else:
-            return next_states, rewards, dones, {}
+            return next_states, rewards, dones, info
 
     # Determine the next state and reward based on current state and action
     def _get_next_state_and_reward(self, state, action, target_state):
@@ -229,6 +253,25 @@ class Env:
     # Check if the current state is the target state
     def _is_done(self, state, target_state):
         return state == target_state
+
+    def get_los_nlos(self, x: int, y: int) -> str:
+        """
+        根据离散化后的坐标 (x, y) 返回该格点的 LOS/NLOS 分类。
+        若 env 的网格尺寸与 map_config 一致，则直接查表；
+        否则将 (x, y) 按比例映射到 map_config 的网格后查表。
+        :param x: 离散化行坐标（网格索引）
+        :param y: 离散化列坐标（网格索引）
+        :return: 'los'（视距）或 'nlos'（非视距）
+        """
+        map_rows, map_cols = self._map_config_map_size
+        if self.grid_rows == map_rows and self.grid_cols == map_cols:
+            return _map_get_los_nlos(x, y)
+        # 将 env 网格坐标线性映射到 map_config 网格
+        x_map = int(round(x * map_rows / max(1, self.grid_rows)))
+        y_map = int(round(y * map_cols / max(1, self.grid_cols)))
+        x_map = max(0, min(x_map, map_rows - 1))
+        y_map = max(0, min(y_map, map_cols - 1))
+        return _map_get_los_nlos(x_map, y_map, self._los_nlos_grid, self._map_config_map_size)
 
     def render(self, mode='human', save_path=None):
         """
@@ -476,10 +519,7 @@ class Env:
 if __name__ == "__main__":
     env = Env()
     env.reset()
-    print(len(env.forbidden_states))
-    print(env.forbidden_states)
-    print("after reset", env.agent_states)
-    print("after reset", len(env.traj[0]))
-    env.step([(1, 0), (0, 1), (0, -1), (-1, 0)])
-    print("after step", env.agent_states)
-    print("after step", len(env.traj[0]))
+
+    # 输入离散化坐标 (x, y)，得到 LOS/NLOS 分类
+    print(env.get_los_nlos(0, 0))   # 例如 'los' 或 'nlos'
+    print(env.get_los_nlos(30, 60))  # 例如天线附近

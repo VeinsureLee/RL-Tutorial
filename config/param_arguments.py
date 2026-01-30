@@ -39,6 +39,10 @@ parser.add_argument("--number_of_robots", type=int, default=4)
 parser.add_argument("--total_power", type=float, default=1.0)
 # SIC 所需最小功率差 rho_min（瓦特），满足 (P2-P1)*g1 >= rho_min
 parser.add_argument("--rho_min", type=float, default=0.01)
+# 最大发射功率（瓦特），可选 50, 100, 150, 200, 250
+parser.add_argument("--P_max", type=float, default=100.0, choices=[50.0, 100.0, 150.0, 200.0, 250.0])
+# 最小发射功率（瓦特）
+parser.add_argument("--P_min", type=float, default=5.0)
 ## ==================== End of User settings ====================
 
 
