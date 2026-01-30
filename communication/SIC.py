@@ -27,7 +27,8 @@ def compute_sinr(h1, h2, w, P1, P2, verbose=False):
     :param verbose: 是否打印 SINR 计算过程
     :return: (sinr_1, sinr_2) 标量
     """
-    sigma = max(float(noise_power), 1e-12)
+    # 使用真实噪声功率：power_AWGN=-143 dBm/Hz → 约 5e-18 W，下限仅防除零，不覆盖真实值
+    sigma = max(float(noise_power), 1e-25)
     h1 = np.asarray(h1, dtype=np.complex128).ravel()
     h2 = np.asarray(h2, dtype=np.complex128).ravel()
     w = np.asarray(w, dtype=np.complex128)
