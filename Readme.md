@@ -117,9 +117,9 @@ Robots sorted by $|h_k|^2$ (descending); pair rank $m$ with rank $K/2+m$ into $M
 
 #### 2.3.2 Diagonalization Precoding
 
-For cluster $m$, precoder $\mathbf{w}_m$ lies in the null space of other clusters' channels: $\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0}$ (Eq. 2-7). SVD of $\tilde{\mathbf{H}}_{m,i}$ yields $\tilde{\mathbf{V}}_m^{(0)}$ (null space); SVD of $\mathbf{H}_m \tilde{\mathbf{V}}_m^{(0)}$ yields $\mathbf{V}_m^{(1)}$. Then:
+For cluster $m$, precoder $\mathbf{w}_m$ lies in the null space of channels of other clusters: $\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0}$ (Eq. 2-7). SVD of $\tilde{\mathbf{H}}_{m,i}$ yields $\tilde{\mathbf{V}}_m^{(0)}$ (null space); SVD of $\mathbf{H}_m \tilde{\mathbf{V}}_m^{(0)}$ yields $\mathbf{V}_m^{(1)}$. Then:
 
-$$\mathbf{w}_m = \tilde{\mathbf{V}}_m^{(0)} \mathbf{V}_m^{(1)} \quad \text{(Eq. 2-8–2-10)}$$
+$$\mathbf{w}_m = \tilde{\mathbf{V}}_m^{(0)} \mathbf{V}_m^{(1)} \quad \text{(Eq. 2-8--2-10)}$$
 
 #### 2.3.3 SIC and URLLC Error Rate
 
