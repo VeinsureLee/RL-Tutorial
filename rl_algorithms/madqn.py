@@ -255,6 +255,9 @@ def train_madqn(env, madqn):
     return_list = []
     # 记录每个agent的return列表
     agent_return_lists = [[] for _ in range(madqn.num_agents)]
+    # 记录误码率：每 episode 平均 BER、每个 agent 每 episode 平均 BER
+    ber_list = []
+    agent_ber_lists = [[] for _ in range(madqn.num_agents)]
 
     for i in range(madqn.iteration):
         madqn.epsilon = epsilon
@@ -271,6 +274,10 @@ def train_madqn(env, madqn):
             agent_returns = [0.0] * madqn.num_agents
             # 跟踪每个agent是否已到达目的地
             agent_arrived = [False] * madqn.num_agents
+            # 跟踪每 step 的 BER 累加，用于计算 episode 平均误码率
+            episode_ber_sum = 0.0
+            episode_ber_sum_per_agent = [0.0] * madqn.num_agents
+            step_count = 0
 
             ep_return = 0
             for t in range(madqn.episode_length):
@@ -281,7 +288,13 @@ def train_madqn(env, madqn):
 
                 # 执行动作
                 step_result = env.step(actions)
-                next_states, rewards, dones, _ = step_result
+                next_states, rewards, dones, info = step_result
+                # 从 info 中取误码率（env.step 返回 ber_per_agent），累加用于计算平均误码率
+                ber_this = info.get("ber", info.get("ber_per_agent", [0.5] * madqn.num_agents))
+                episode_ber_sum += np.mean(ber_this)
+                for j in range(madqn.num_agents):
+                    episode_ber_sum_per_agent[j] += ber_this[j]
+                step_count += 1
 
                 # 处理单个 agent 的情况（向后兼容）
                 if env.num_agents == 1:
@@ -332,6 +345,12 @@ def train_madqn(env, madqn):
             # 记录每个agent的return
             for agent_id in range(madqn.num_agents):
                 agent_return_lists[agent_id].append(agent_returns[agent_id])
+            # 记录误码率：本 episode 平均误码率（对 step 取平均）
+            episode_avg_ber = episode_ber_sum / step_count if step_count > 0 else 0.0
+            ber_list.append(episode_avg_ber)
+            for j in range(madqn.num_agents):
+                agent_avg_ber = episode_ber_sum_per_agent[j] / step_count if step_count > 0 else 0.0
+                agent_ber_lists[j].append(agent_avg_ber)
 
             # epsilon **按 episode 衰减**
             madqn.epsilon = max(madqn.epsilon_min,
@@ -346,7 +365,7 @@ def train_madqn(env, madqn):
                 'Agent Returns': return_str,
                 'Epsilon': f'{madqn.epsilon:.3f}'
             })
-    return madqn, return_list, agent_return_lists
+    return madqn, return_list, agent_return_lists, ber_list, agent_ber_lists
 
 
 if __name__ == "__main__":
