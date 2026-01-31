@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from env.env import Env
 from rl_algorithms.madqn import MADQN, train_madqn
+from simulation.visualize_dual import render_dual, render_animation_dual
 
 
 def run_with_agent(env, agent, max_steps=400000, training=False, verbose=True):
@@ -203,24 +204,36 @@ def main():
     success = run_with_agent(env, madqn, max_steps=2000, training=False, verbose=True)
     
     print("\n" + "=" * 50)
-    print("开始渲染环境")
+    print("开始渲染环境（热力图 + 普通图，图例在下方）")
     print("=" * 50)
     
-    # 渲染静态图像
-    print("\n渲染静态图像...")
-    env.render(mode='human')
-    
-    # 渲染动画并保存
-    print("\n渲染动画...")
     os.makedirs("results", exist_ok=True)
-    gif_path = os.path.join("results", "madqn_pretrained_test04.gif")
+    gif_path = os.path.join("results/gif", "madqn_pretrained_test04.gif")
+    last_frame_path = os.path.join("results/png", "madqn_pretrained_test04_last_frame.png")
+    
+    # 双视图静态图：热力图 + 普通图，地图上不显示 start/target，下方图例展示
+    print("\n渲染双视图静态图（热力图 + 轨迹）...")
     try:
-        env.render_animation(interval=1, save_path=gif_path)
-        print("保存成功")
+        render_dual(env, save_path=None)
+    except Exception as e:
+        print(f"双视图渲染出错: {e}")
+    
+    # 双视图动画：保存 GIF，并保存最后一帧
+    print("\n渲染双视图动画并保存 GIF 与最后一帧...")
+    try:
+        render_animation_dual(
+            env,
+            interval=200,
+            save_gif_path=gif_path,
+            save_last_frame_path=last_frame_path,
+            max_frames=100,
+        )
+        print(f"GIF 已保存: {gif_path}")
+        print(f"最后一帧已保存: {last_frame_path}")
     except Exception as e:
         print(f"动画渲染出错: {e}")
-        print("尝试使用静态渲染模式")
-        env.render(mode='human')
+        print("尝试使用静态双视图")
+        render_dual(env, save_path=last_frame_path)
     
     print("\n渲染完成！")
 

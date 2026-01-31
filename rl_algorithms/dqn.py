@@ -26,7 +26,7 @@ class DQN(Agent):
                  epsilon = 1.0, epsilon_min = 0.01, epsilon_decay = 0.995,
                  num_episodes = 10, episode_length = 400000,
                  batch_size = 64, mini_batch_size = 32,
-                 hidden_dim = 128, update_freq = 100, device = torch.device("cuda")):
+                 hidden_dim = 128, update_freq = 100, device = torch.device("cpu")):
         super().__init__(env=env, 
                          lr=lr, gamma=gamma, 
                          epsilon=epsilon, epsilon_min=epsilon_min, 
