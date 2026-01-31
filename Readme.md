@@ -31,36 +31,54 @@ The project implements two reinforcement learning (RL) algorithms for navigation
 
 After training, load the saved model and run evaluation/visualization (e.g., render trajectories and save GIFs/PNGs under `results/`).
 
-### 1.4 Running Results
+### 1.4 Training Results
+
+Training curves and metrics are stored in `results/Train/`.
+
+**DQN (Single-Agent)**
+
+| DQN Training Curve |
+|--------------------|
+| <img src="results/Train/dqn.png" width="320" alt="DQN training curve" /> |
+
+**MADQN (4-Agent)**
+
+| MADQN 4-Agent Return | MADQN 4-Agent BER |
+|----------------------|-------------------|
+| <img src="results/Train/madqn_4_return.png" width="320" alt="MADQN return" /> | <img src="results/Train/madqn_4_ber.png" width="320" alt="MADQN BER" /> |
+
+*DQN training curve; MADQN 4-agent episodic return and BER (Bit Error Rate) during training.*
+
+### 1.5 Running Results
 
 Trajectories and last-frame snapshots are stored in `results/`.
 
-#### DQN（单智能体）
+#### DQN (Single-Agent)
 
-| 轨迹动画 | 最后一帧 |
-|---------|----------|
-| <img src="results/gif/dqn_pretrained_test.gif" width="360" alt="DQN 轨迹" /> | <img src="results/png/dqn_pretrained_test_last_frame.png" width="360" alt="DQN 最后一帧" /> |
+| Trajectory Animation | Last Frame |
+|----------------------|------------|
+| <img src="results/gif/dqn_pretrained_test.gif" width="360" alt="DQN trajectory" /> | <img src="results/png/dqn_pretrained_test_last_frame.png" width="360" alt="DQN last frame" /> |
 
-*单智能体 DQN 导航轨迹与终止时刻截图。*
+*Single-agent DQN navigation trajectory and terminal snapshot.*
 
-#### MADQN（多智能体，含 4 智能体）
+#### MADQN (Multi-Agent, 4 Agents)
 
-| 1 智能体 (test01) | 2 智能体 (test02) | 4 智能体 (test04) |
-|-------------------|-------------------|-------------------|
+| 1 Agent (test01) | 2 Agents (test02) | 4 Agents (test04) |
+|------------------|-------------------|-------------------|
 | ![MADQN test01](results/gif/madqn_pretrained_test01.gif) | ![MADQN test02](results/gif/madqn_pretrained_test02.gif) | ![MADQN test04](results/gif/madqn_pretrained_test04.gif) |
 
-*多智能体 MADQN 在不同智能体数量下的轨迹动画。*
+*Multi-agent MADQN trajectory animations with different numbers of agents.*
 
-| MADQN 最后一帧 (test01) | MADQN 最后一帧 (test02) | MADQN 最后一帧 (test04) |
-|-------------------------|-------------------------|-------------------------|
-| ![MADQN test01 最后一帧](results/png/madqn_pretrained_test01_last_frame.png) | ![MADQN test02 最后一帧](results/png/madqn_pretrained_test02_last_frame.png) | ![MADQN test04 最后一帧](results/png/madqn_pretrained_test04_last_frame.png) |
+| MADQN Last Frame (test01) | MADQN Last Frame (test02) | MADQN Last Frame (test04) |
+|--------------------------|---------------------------|---------------------------|
+| ![MADQN test01 last frame](results/png/madqn_pretrained_test01_last_frame.png) | ![MADQN test02 last frame](results/png/madqn_pretrained_test02_last_frame.png) | ![MADQN test04 last frame](results/png/madqn_pretrained_test04_last_frame.png) |
 
-#### 其他结果文件
+#### Other Result Files
 
 | Result | Description |
 |--------|-------------|
-| `results/compare/madqn_pretrained_test02.gif`, `madqn_pretrained_test02_minus.gif` | MADQN 对比实验。 |
-| `results/random.gif` | 随机策略基线。 |
+| `results/compare/madqn_pretrained_test02.gif`, `madqn_pretrained_test02_minus.gif` | MADQN comparison experiments. |
+| `results/random.gif` | Random policy baseline. |
 
 ---
 
@@ -99,7 +117,7 @@ Robots sorted by $|h_k|^2$ (descending); pair rank $m$ with rank $K/2+m$ into $M
 
 #### 2.3.2 Diagonalization Precoding
 
-For cluster $m$, precoder $\mathbf{w}_m$ lies in the null space of other clusters’ channels: $\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0}$ (Eq. 2-7). SVD of $\tilde{\mathbf{H}}_{m,i}$ yields $\tilde{\mathbf{V}}_m^{(0)}$ (null space); SVD of $\mathbf{H}_m \tilde{\mathbf{V}}_m^{(0)}$ yields $\mathbf{V}_m^{(1)}$. Then:
+For cluster $m$, precoder $\mathbf{w}_m$ lies in the null space of other clusters' channels: $\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0}$ (Eq. 2-7). SVD of $\tilde{\mathbf{H}}_{m,i}$ yields $\tilde{\mathbf{V}}_m^{(0)}$ (null space); SVD of $\mathbf{H}_m \tilde{\mathbf{V}}_m^{(0)}$ yields $\mathbf{V}_m^{(1)}$. Then:
 
 $$\mathbf{w}_m = \tilde{\mathbf{V}}_m^{(0)} \mathbf{V}_m^{(1)} \quad \text{(Eq. 2-8–2-10)}$$
 
@@ -117,4 +135,4 @@ Finite-blocklength decoding error (URLLC): $Q(\xi) = \frac{1}{\sqrt{2\pi}}\int_{
 
 $$\epsilon_{m,i}(t) = Q\left(\ln 2 \sqrt{\frac{N}{V}}\left(\log_2(1+SINR_{m,i})-\frac{D}{N}\right)\right) \quad \text{(Eq. 2-14–2-16)}$$
 
-$N$ = block length, $D$ = packet size. Analysis focuses on the weaker user’s error rate.
+$N$ = block length, $D$ = packet size. Analysis focuses on the weaker user's error rate.
