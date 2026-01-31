@@ -1,57 +1,85 @@
 # Graduation Project
 
-Title: Communication–Perception Collaborative Navigation and Trajectory Planning 
-Algorithms for Multi-Robot Systems
+**Title:** Communication–Perception Collaborative Navigation and Trajectory Planning Algorithms for Multi-Robot Systems
 
-## 1 Project describtion
-To run the project, download the requirements first:
-pip install -m requirements
+---
 
-TODO: Fill this part
+## 1 Project Description
 
-## 2 System modeling
+### 1.1 Setup
 
-### 2.1 System describtion
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 1.2 Algorithms
+
+The project implements two reinforcement learning (RL) algorithms for navigation in a communication-aware multi-robot setting.
+
+- **DQN (Deep Q-Network)**  
+  Single-agent navigation. The agent learns a policy via Q-learning with a neural network that takes **state** and **target** as input: \(Q(s, a \mid \text{target})\). The network uses state embedding, target embedding, and relative position (distance/direction to target). Training uses experience replay, a target Q-network, and \(\varepsilon\)-greedy exploration. The reward can incorporate communication quality (e.g., BER from the NOMA/SIC model).
+
+- **MADQN (Multi-Agent DQN)**  
+  Multi-robot navigation where each robot has its own Q-network and replay buffer. All agents act in parallel; each agent moves toward its own target. The same TD learning and target-network update are applied per agent. The environment reward can include SIC-based BER so that trajectories are optimized for both reaching goals and maintaining link quality.
+
+### 1.3 How to Run
+
+- **Train DQN:** run `rl_algorithms/dqn.py` or use `simulation/experiment_dqn.py` (single-agent).
+- **Train MADQN:** run `rl_algorithms/madqn.py` or use `simulation/experiment_madqn.py` (multi-agent).
+
+After training, load the saved model and run evaluation/visualization (e.g., render trajectories and save GIFs/PNGs under `results/`).
+
+### 1.4 Running Results
+
+Trajectories and last-frame snapshots are stored in `results/`.
+
+#### DQN（单智能体）
+
+| 轨迹动画 | 最后一帧 |
+|---------|----------|
+| <img src="results/gif/dqn_pretrained_test.gif" width="360" alt="DQN 轨迹" /> | <img src="results/png/dqn_pretrained_test_last_frame.png" width="360" alt="DQN 最后一帧" /> |
+
+*单智能体 DQN 导航轨迹与终止时刻截图。*
+
+#### MADQN（多智能体，含 4 智能体）
+
+| 1 智能体 (test01) | 2 智能体 (test02) | 4 智能体 (test04) |
+|-------------------|-------------------|-------------------|
+| ![MADQN test01](results/gif/madqn_pretrained_test01.gif) | ![MADQN test02](results/gif/madqn_pretrained_test02.gif) | ![MADQN test04](results/gif/madqn_pretrained_test04.gif) |
+
+*多智能体 MADQN 在不同智能体数量下的轨迹动画。*
+
+| MADQN 最后一帧 (test01) | MADQN 最后一帧 (test02) | MADQN 最后一帧 (test04) |
+|-------------------------|-------------------------|-------------------------|
+| ![MADQN test01 最后一帧](results/png/madqn_pretrained_test01_last_frame.png) | ![MADQN test02 最后一帧](results/png/madqn_pretrained_test02_last_frame.png) | ![MADQN test04 最后一帧](results/png/madqn_pretrained_test04_last_frame.png) |
+
+#### 其他结果文件
+
+| Result | Description |
+|--------|-------------|
+| `results/compare/madqn_pretrained_test02.gif`, `madqn_pretrained_test02_minus.gif` | MADQN 对比实验。 |
+| `results/random.gif` | 随机策略基线。 |
+
+---
+
+## 2 System Modeling
+
+### 2.1 System Description
 
 <img src="figs/2-1.system_model.png" alt="System Model" style="display: block; margin: 0 auto;">
 <p style="text-align: center; font-size: 0.9em; color: #555;">Fig. 1-1: System model</p>
 
-As depicted in the system model of Figure 1-1, 
-this indoor robot system comprises an access point equipped with 
-**N antennas** and **K single-antenna robots**, 
-where the set of robots is denoted as 
-($ k \in \mathcal{K} = \{1,2,\dots,K\} $), 
-and a number of obstacles are positioned within the model.
+Indoor system: one access point with **$N$ antennas**, **$K$ single-antenna robots** ($k \in \mathcal{K} = \{1,2,\dots,K\}$), and obstacles. Time step $t \in \{1,2,\dots,T_k\}$. Access point position **$q_{AP}=(x_{AP},y_{AP},z_{AP})$**; robot $k$ at $t$: **$q_{k}=(x_{k},y_{k},z_{k})$**.
 
-Establish a three-dimensional coordinate system as shown in the figure.
-t represents the time step of the robot from the starting point to the ending point.
-In this projection, $t \in \{1,2,...,T_k\}$, 
-access point coordinates is **$q_{AP}=(x_{AP},y_{AP},z_{AP})$**, 
-robots k's coordinates in time step t is **$q_{k}=(x_{k},y_{k},z_{k})$**.
+### 2.2 Channel Model
 
-### 2.2 Channel model
-
-This work primarily focuses on channel models for indoor factory scenarios. 3GPP classifies scenarios into four categories based on standards such as base station height, room size, and machine density. For the analysis in this work, the channel model selects the "Sparse clutter Low BS (SL)" scenario to better understand and study wireless communication problems in industrial environments.
-
-In the downlink transmission channel, the channel coefficient from the access point to the $k$-th robot at time $t$ can be expressed as:
+Indoor SL (Sparse clutter Low BS) scenario; downlink channel coefficient (path loss + Rayleigh small-scale fading):
 
 $$h_k(t) = PL_k(t) - 10\log_{10}(g_k(t))$$
 
-where $PL_k$ represents the path loss, and $g_k(t)$ represents the small-scale fading following a random Rayleigh distribution.
-
-In 5G systems, there are two widely used path loss models, one of which is the ABG model. The formula for the ABG model is:
-
-$$PL_{ABG}(f_c, d) = 10\alpha \log_{10}(d/d_0) + \beta + 10\gamma \log_{10}(f_c/f_0) + X_{ABG} \quad \text{(Eq. 2-1)}$$
-
-The parameters in the formula are:
-- $\alpha$ is the distance-dependent exponent
-- $\beta$ is the intercept
-- $\gamma$ is the frequency-dependent exponent
-- $X_{ABG}$ is the shadow fading following a zero-mean normal distribution, with standard deviation denoted by $\sigma$
-
-This work focuses on a typical indoor scenario, in which case the ABG model evolves into a floating intercept model.
-
-In the SL (Sparse clutter Low BS) scenario, the model considers both Line-of-Sight (LOS) and Non-Line-of-Sight (NLOS) links. Setting $f_c = 3.5\text{GHz}$ and $d$ as the distance from the access point to the robot, the specific path loss formulas for the ABG model in the SL scenario are:
+Path loss uses ABG in SL: $f_c = 3.5\,\text{GHz}$, $d$ = AP–robot distance:
 
 $$PL_{LOS}(f_c, d) = 31.84 + 21.50\log_{10}(d) + 19.00\log_{10}(f_c) \quad \text{(Eq. 2-2)}$$
 
@@ -59,93 +87,34 @@ $$PL_{SL}(f_c, d) = 33 + 25.50\log_{10}(d) + 20\log_{10}(f_c) \quad \text{(Eq. 2
 
 $$PL_{NLOS} = \max(PL_{SL}, PL_{LOS}) \quad \text{(Eq. 2-4)}$$
 
-Based on the above large-scale transmission model, the channel vector from the access point to the $k$-th robot is expressed as:
+Channel vector (array response + gain): $\beta_k(t) = 10^{-h_k(t)/20}$; $D = \lambda/2$:
 
-$$\tilde{h}_k(t) = \beta_k(t)(\alpha_k^{\text{transmit}})^H, \quad \forall k,t \quad \text{(Eq. 2-5)}$$
+$$\tilde{h}_k(t) = \beta_k(t)(\alpha_k^{\text{transmit}})^H, \quad \alpha_k^{\text{transmit}} = \frac{1}{\sqrt{N_t}} \left[1, e^{-j\pi\sin\theta}, \ldots, e^{-j\pi(N_t-1)\sin\theta}\right]^T \quad \text{(Eq. 2-5, 2-6)}$$
 
-where the expression for $\alpha_k^{\text{transmit}}$ is:
+### 2.3 Communication Model
 
-$$\alpha_k^{\text{transmit}} = \frac{1}{\sqrt{N_t}} \left[1, e^{-j(2\pi D/\lambda)\sin\theta}, \ldots, e^{-j(2\pi D/\lambda)(N_t-1)\sin\theta}\right]^T \quad \text{(Eq. 2-6)}$$
+#### 2.3.1 NOMA Grouping
 
-Parameter descriptions:
-- Its dimension is $1 \times N_t$
-- $\beta_k(t) = 10^{-h_k(t)/20}, \forall t$ represents the path loss from the access point to the $k$-th robot
-- $\lambda$ is the antenna wavelength
-- In the formula, $D$ is the distance between antennas, set to $\lambda/2$
+Robots sorted by $|h_k|^2$ (descending); pair rank $m$ with rank $K/2+m$ into $M = K/2$ clusters ($K$ even).
 
-### 2.3 Communication model
+#### 2.3.2 Diagonalization Precoding
 
-#### 2.3.1 Non-Orthogonal Multiple Access Scheme
+For cluster $m$, precoder $\mathbf{w}_m$ lies in the null space of other clusters’ channels: $\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0}$ (Eq. 2-7). SVD of $\tilde{\mathbf{H}}_{m,i}$ yields $\tilde{\mathbf{V}}_m^{(0)}$ (null space); SVD of $\mathbf{H}_m \tilde{\mathbf{V}}_m^{(0)}$ yields $\mathbf{V}_m^{(1)}$. Then:
 
-To implement the NOMA scheme, the base station groups the $K$ robots based on their channel conditions. The grouping strategy is as follows:
+$$\mathbf{w}_m = \tilde{\mathbf{V}}_m^{(0)} \mathbf{V}_m^{(1)} \quad \text{(Eq. 2-8–2-10)}$$
 
-First, the base station collects the channel state information (CSI) of all $K$ robots. Then, the robots are sorted in descending order according to the squared magnitude of their complex channel coefficients $|h_k|^2$.
+#### 2.3.3 SIC and URLLC Error Rate
 
-The robots are paired into groups using the following pairing rule: the robot ranked $m$-th is paired with the robot ranked $(K/2 + m)$-th to form a group. This pairing process continues until $K/2$ groups are formed.
-
-If $K$ is odd, there will be one unpaired robot that forms a group by itself, and the grouping logic remains the same. However, in this work, $K$ is assumed to be even by default.
-
-#### 2.3.2 Diagonalization precoding for inter-cluster interference cancellation
-
-To mitigate inter-cluster interference, diagonalization precoding is employed. The core idea is to design precoding matrices that lie in the null space of the interfering channels, thereby preventing interference to other clusters while transmitting to the desired cluster.
-
-Consider a system with $M$ clusters (as described in Section 2.3.1, where two users form a cluster, and there are $M$ such clusters). For a specific cluster $m$, its precoding matrix $\mathbf{w}_m$ must satisfy the following condition to cancel interference directed towards other clusters:
-
-$$\tilde{\mathbf{H}}_{m,i} \mathbf{w}_m = \mathbf{0} \quad \text{(Eq. 2-7)}$$
-
-Here, $\mathbf{H}_{m,i} = [\mathbf{h}_1, \dots, \mathbf{h}_M]$ represents an aggregated channel matrix. $\tilde{\mathbf{H}}_{m,i}$ is the submatrix obtained by removing the column corresponding to cluster $m$ from $\mathbf{H}_{m,i}$. This $\tilde{\mathbf{H}}_{m,i}$ therefore represents the aggregate channel vectors of all interfering clusters. Its dimension is $N_t \times (M-1)$, where $N_t$ is the number of transmit antennas.
-
-To find the appropriate precoding matrix $\mathbf{w}_m$, Singular Value Decomposition (SVD) is performed on $\tilde{\mathbf{H}}_{m,i}$:
-
-$$\tilde{\mathbf{H}}_{m,i} = \tilde{\mathbf{U}}_m \mathbf{\Sigma}_m [\tilde{\mathbf{V}}_m^{(1)} \quad \tilde{\mathbf{V}}_m^{(0)}]^H \quad \text{(Eq. 2-8)}$$
-
-In this decomposition:
-- $\tilde{\mathbf{U}}_m$ is the left singular matrix
-- $\mathbf{\Sigma}_m$ is the diagonal matrix containing singular values
-- $[\tilde{\mathbf{V}}_m^{(1)} \quad \tilde{\mathbf{V}}_m^{(0)}]$ is the right singular matrix, partitioned into two sub-matrices
-
-Specifically:
-- $\tilde{\mathbf{V}}_m^{(1)}$ comprises the first $N_m$ columns of the right singular matrix. These columns represent the transmission directions of signals that are correlated with the known interfering channel information. Here, $N_m$ denotes the effective rank or the number of significant interfering dimensions of $\tilde{\mathbf{H}}_{m,i}$
-- $\tilde{\mathbf{V}}_m^{(0)}$ comprises the remaining columns of the right singular matrix. These columns span the null space of $\tilde{\mathbf{H}}_{m,i}$, describing transmission directions that are uncorrelated with the known interfering channel information. Signals transmitted along these directions will not cause interference to the other clusters represented by $\tilde{\mathbf{H}}_{m,i}$
-
-For a non-empty null space (i.e., for $\tilde{\mathbf{V}}_m^{(0)}$ to have a non-zero dimension), the total number of transmit antennas $N_t$ must be greater than the effective number of receive antennas (or rank) of the interfering channels, $N_m$.
-
-The equivalent channel undergoes SVD decomposition again:
-
-$$\mathbf{H}_{m,i} \tilde{\mathbf{V}}_m^{(0)} = \tilde{\mathbf{U}}_{m,i} \mathbf{\Sigma}_m [\tilde{\mathbf{V}}_m^{(1)} \quad \tilde{\mathbf{V}}_m^{(0)}]^H \quad \text{(Eq. 2-9)}$$
-
-where $\tilde{\mathbf{V}}_m^{(1)}$ consists of the first $N_m$ columns of the right singular matrix of this equivalent channel. The precoding matrix is then:
-
-$$\mathbf{w}_m = \mathbf{V}_m^{(1)} \tilde{\mathbf{V}}_m^{(0)} \quad \text{(Eq. 2-10)}$$
-
-This precoding matrix $\mathbf{w}_m$ is designed to mitigate interference among the robots, facilitating effective communication.
-
-#### 2.3.3 Successive Interference Cancellation
-
-Based on the power-domain NOMA transmission scheme, $P_{m,1}$ and $P_{m,2}$ are the allocated powers for each signal in each cluster. After transmission through the Rayleigh channel, the signal for each cluster can be written as:
+Received signal (cluster $m$, two users):
 
 $$\begin{bmatrix} \mathbf{y}_{m,1} \\ \mathbf{y}_{m,2} \end{bmatrix} = \begin{bmatrix} \mathbf{h}_{m,1} \\ \mathbf{h}_{m,2} \end{bmatrix} \mathbf{w}_m \mathbf{s}_m + \begin{bmatrix} \mathbf{n}_{m,1} \\ \mathbf{n}_{m,2} \end{bmatrix} \quad \text{(Eq. 2-11)}$$
 
-where $\mathbf{y}_{m,1}$ and $\mathbf{y}_{m,2}$ represent the received baseband signals at robot 1 and robot 2, respectively, within cluster $m$; $\mathbf{h}_{m,1}$ and $\mathbf{h}_{m,2}$ are the channel vectors from the access point to robot 1 and robot 2 in cluster $m$; $\mathbf{w}_m$ is the precoding matrix for cluster $m$; $\mathbf{s}_m = \sqrt{P_{m,1}} x_{m,1} + \sqrt{P_{m,2}} x_{m,2}$ is the superimposed NOMA signal for cluster $m$, where $x_{m,1}$ and $x_{m,2}$ are the data streams for the two robots; and $\mathbf{n}_{m,1}$ and $\mathbf{n}_{m,2}$ represent the additive white Gaussian noise (AWGN) at the receivers.
+Power allocation: weak user gets more power; SIC constraint $(P_{m,2}-P_{m,1})\beta_{m,1} \geq \rho_{\min}$. After SIC:
 
-In this system, the access point needs to appropriately select the transmit power to perform correct SIC decoding. Robots with weaker channel conditions need to be allocated greater transmit power, but must satisfy $P_{m,2}(t)\beta_{m,1}(t) - P_{m,1}(t)\beta_{m,1}(t) \geq \rho_{\min}$, where $\rho_{\min}$ is the minimum power difference required to perform SIC. After completing SIC, the Signal-to-Interference-plus-Noise Ratio (SINR) for the first robot (typically the stronger user) in cluster $m$ is:
+$$SINR_{m,1} = \frac{P_{m,1} |\mathbf{h}_{m,1} \mathbf{w}_m|^2}{\sigma^2}, \quad SINR_{m,2} = \frac{P_{m,2}|\mathbf{h}_{m,2}\mathbf{w}_m|^2}{P_{m,1}|\mathbf{h}_{m,2}\mathbf{w}_m|^2 + \sigma^2} \quad \text{(Eq. 2-12, 2-13)}$$
 
-$$SINR_{m,1} = \frac{P_{m,1} |\mathbf{h}_{m,1} \mathbf{w}_m|^2}{\sigma^2} \quad \text{(Eq. 2-12)}$$
+Finite-blocklength decoding error (URLLC): $Q(\xi) = \frac{1}{\sqrt{2\pi}}\int_{\xi}^{\infty} e^{-t^2/2}\,dt$, $V = 1-(1+SINR_{m,i})^{-2}$:
 
-For the second robot (typically the weaker user) in cluster $m$, the SINR is:
+$$\epsilon_{m,i}(t) = Q\left(\ln 2 \sqrt{\frac{N}{V}}\left(\log_2(1+SINR_{m,i})-\frac{D}{N}\right)\right) \quad \text{(Eq. 2-14–2-16)}$$
 
-$$SINR_{m,2} = \frac{P_{m,2}|\mathbf{h}_{m,2}\mathbf{w}_m|^2}{P_{m,1}|\mathbf{h}_{m,2}\mathbf{w}_m|^2 + \sigma^2} \quad \text{(Eq. 2-13)}$$
-
-In URLLC, short packet transmission is adopted to reduce delay, making the traditional Shannon capacity formula no longer applicable. The achievable data rate under finite blocklength becomes a complex expression concerning decoding error probability and blocklength. The decoding error probability for robot $i$ in cluster $m$ at time $t$ is:
-
-$$\epsilon_{m,i}(t) = Q\left(\ln 2 \sqrt{\frac{N}{V}}\left(\log_2(1+SINR_{m,i})-\frac{D}{N}\right)\right) \quad \text{(Eq. 2-14)}$$
-
-where $Q(\xi)$ is the Q-function defined as:
-
-$$Q(\xi) = \frac{1}{\sqrt{2\pi}}\int_{\xi}^{\infty}e^{-\frac{t^2}{2}}dt \quad \text{(Eq. 2-15)}$$
-
-and $V$ is the channel dispersion given by:
-
-$$V = 1-(1+SINR_{m,i}(t))^{-2} \quad \text{(Eq. 2-16)}$$
-
-Here, $N$ is the channel block length, $D$ is the data packet size, and $V$ is the channel dispersion. Since this work adopts SIC technology in its analysis, the error rates among robots are mutually influenced. This work mainly considers the error rate situation for robots with poorer channel conditions.
+$N$ = block length, $D$ = packet size. Analysis focuses on the weaker user’s error rate.
