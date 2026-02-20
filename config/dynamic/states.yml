@@ -1,0 +1,8 @@
+# 智能体状态配置 (对应 config/agent_config.py)
+description: "智能体起始与目标状态由 number_of_robots、map_size、禁区及 RANDOM_SEED 自动生成，不重叠且不在禁区内"
+
+start_states:
+  description: "各智能体起始状态列表 [(x1,y1), (x2,y2), ...]，由 agent_config 生成"
+
+target_state:
+  description: "各智能体目标状态列表，由 agent_config 生成"

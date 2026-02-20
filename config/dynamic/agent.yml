@@ -1,0 +1,6 @@
+# 智能体配置 (对应 config/agent_config.py)
+description: "智能体起始与目标状态由 number_of_robots、map_size、禁区及 RANDOM_SEED 自动生成，不重叠且不在禁区内"
+
+number_of_robots:
+  value: 4
+  description: "机器人数量"

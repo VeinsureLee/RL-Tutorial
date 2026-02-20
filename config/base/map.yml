@@ -1,0 +1,14 @@
+# 地图与禁区参数 (对应 config/map_config.py)
+description: "地图尺寸与禁区生成相关参数"
+
+map_size:
+  value: [48, 24]
+  description: "地图尺寸 (rows, cols)"
+
+num_forbidden_squares:
+  value: 5
+  description: "禁区（方形）数量"
+
+square_size_range:
+  value: [3, 5]
+  description: "方形禁区边长范围 (min, max)"

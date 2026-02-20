@@ -1,0 +1,6 @@
+# 随机种子参数 (对应 config/map_config.py)
+description: "随机种子相关参数"
+
+random_seed:
+  value: 42
+  description: "随机种子，用于禁区生成的可复现性"

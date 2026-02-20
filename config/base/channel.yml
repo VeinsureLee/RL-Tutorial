@@ -1,0 +1,42 @@
+# 通信信道参数 (对应 config/param_arguments.py)
+description: "通信信道相关参数"
+
+carrier_frequency:
+  value: 3.5
+  description: "指定载波频率 (GHz)"
+
+sigma_rayleigh:
+  value: 1.2
+  description: "Rayleigh 分布的 sigma，室内门场景通常设为 1.2"
+
+number_of_antenna:
+  value: 128
+  description: "天线数量"
+
+power_AWGN:
+  value: -143.0
+  description: "加性高斯白噪声功率 (dBm/Hz)"
+
+channel_block_length:
+  value: 256
+  description: "信道块长度"
+
+packet_size:
+  value: 16
+  description: "数据包大小"
+
+total_power:
+  value: 1.0
+  description: "总发射功率（瓦特），用于 NOMA 功率分配"
+
+rho_min:
+  value: 0.01
+  description: "SIC 所需最小功率差（瓦特），满足 (P2-P1)*g1 >= rho_min"
+
+P_max:
+  value: 100.0
+  description: "最大发射功率（瓦特），可选 50, 100, 150, 200, 250"
+
+P_min:
+  value: 5.0
+  description: "最小发射功率（瓦特）"
