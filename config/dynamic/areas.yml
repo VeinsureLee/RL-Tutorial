@@ -1,5 +1,0 @@
-# 禁区配置 (对应 config/map_config.py)
-description: "禁区生成相关参数"
-
-forbidden_areas:
-  description: "禁止区域列表，格式 [((x,y), size), ...]，来自 map_config"
