@@ -16,6 +16,28 @@ def _load_yml(config_path: str, encoding: str = "utf-8"):
         return yaml.safe_load(f)
 
 
+def load_yml(config_path: str, encoding: str = "utf-8"):
+    """
+    通用 yml 加载，供其他模块（如 config）统一读取 yml 配置。
+    与 _load_yml 一致。
+    """
+    with open(config_path, "r", encoding=encoding) as f:
+        return yaml.safe_load(f)
+
+
+def save_yml(config_path: str, data, encoding: str = "utf-8", **yaml_kw) -> None:
+    """
+    通用 yml 写入，供其他模块统一写入 yml 配置。
+    """
+    d = os.path.dirname(config_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    kwargs = {"allow_unicode": True, "default_flow_style": False, "sort_keys": False}
+    kwargs.update(yaml_kw)
+    with open(config_path, "w", encoding=encoding) as f:
+        yaml.dump(data, f, **kwargs)
+
+
 def load_channel_config(
     config_path: str = None, encoding: str = "utf-8"
 ):
@@ -43,6 +65,10 @@ def load_agent_config(
     path = config_path or get_abs_path("config/agent.yml")
     return _load_yml(path, encoding)
 
+def load_random_seed_config(config_path: str = None, encoding: str = "utf-8"):
+    """加载随机种子配置 (config/random_seed.yml)。"""
+    path = config_path or get_abs_path("config/base/random_seed.yml")
+    return _load_yml(path, encoding)
 
 def _format_value(v):
     """将 value 转为可读字符串。"""
@@ -82,16 +108,17 @@ def print_params_settings(
     map_path: str = None,
     env_path: str = None,
     agent_path: str = None,
+    random_seed_path: str = None,
     encoding: str = "utf-8",
 ):
     """
     加载 channel / map / env / agent 四个 yml，并将参数设置打印到控制台。
     """
     sections = [
-        ("通信信道 (channel.yml)", load_channel_config, channel_path or get_abs_path("config/channel.yml")),
-        ("地图与禁区 (map.yml)", load_map_config, map_path or get_abs_path("config/map.yml")),
-        ("环境 (env.yml)", load_env_config, env_path or get_abs_path("config/env.yml")),
-        ("智能体 (agent.yml)", load_agent_config, agent_path or get_abs_path("config/agent.yml")),
+        ("通信信道 (channel.yml)", load_channel_config, channel_path or get_abs_path("config/base/channel.yml")),
+        ("地图与禁区 (map.yml)", load_map_config, map_path or get_abs_path("config/base/map.yml")),
+        ("环境 (env.yml)", load_env_config, env_path or get_abs_path("config/base/env.yml")),
+        ("随机种子 (random_seed.yml)", load_random_seed_config, random_seed_path or get_abs_path("config/base/random_seed.yml")),
     ]
     for title, loader, path in sections:
         print("\n" + "=" * 60)

@@ -1,9 +1,17 @@
-# 地图与禁区参数 (对应 config/map_config.py)
+# 地图与禁区参数 (对应 config/map_config.py 与 config/main 生成地图)
 description: "地图尺寸与禁区生成相关参数"
 
 map_size:
   value: [48, 24]
   description: "地图尺寸 (rows, cols)"
+
+antenna_position:
+  value: [24, 12]
+  description: "天线位置 (x, y) 网格坐标"
+
+number_of_robots:
+  value: 4
+  description: "机器人/智能体数量，用于场景生成"
 
 num_forbidden_squares:
   value: 5

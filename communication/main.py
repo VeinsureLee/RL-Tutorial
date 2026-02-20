@@ -110,7 +110,7 @@ def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None,
         if w_single.size > 0 and np.linalg.norm(w_single) > 1e-12:
             w_single = w_single[:, 0] / np.linalg.norm(w_single[:, 0])
             g = np.abs(np.dot(H_single.ravel(), w_single.ravel())) ** 2
-            from utils import dbm2watt
+            from communication.utils import dbm2watt
             sigma = dbm2watt(param_parser.parse_args().power_AWGN)
             sigma = max(sigma, 1e-25)  # 与 SIC 一致，仅防除零，不覆盖 -143 dBm/Hz 对应的 ~5e-18 W
             sinr = (P_max / 2) * g / sigma
