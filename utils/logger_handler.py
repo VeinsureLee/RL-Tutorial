@@ -39,9 +39,9 @@ def get_logger(
 
     logger.addHandler(console_handler)
 
-    # 文件Handler
+    # 文件Handler（按分钟保存，每次训练时间不同则文件不同，便于比较）
     if not log_file:        # 日志文件的存放路径
-        log_file = os.path.join(LOG_ROOT, f"{name}_{datetime.now().strftime('%Y%m%d')}.log")
+        log_file = os.path.join(LOG_ROOT, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M')}.log")
 
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(file_level)
@@ -52,11 +52,31 @@ def get_logger(
     return logger
 
 
-# 快捷获取日志器
-logger = get_logger()
+def get_file_only_logger(
+        name: str,
+        log_file: str = None,
+        file_level: int = logging.INFO,
+) -> logging.Logger:
+    """获取仅写入文件的 logger，不输出到控制台，用于训练过程中每步/每 episode 的详细日志，避免干扰 tqdm 进度条。"""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    if logger.handlers:
+        return logger
+
+    if not log_file:
+        log_file = os.path.join(LOG_ROOT, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M')}.log")
+
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(file_level)
+    file_handler.setFormatter(DEFAULT_LOG_FORMAT)
+    logger.addHandler(file_handler)
+
+    return logger
 
 
 if __name__ == '__main__':
+    logger = get_logger()
     logger.info("信息日志")
     logger.error("错误日志")
     logger.warning("警告日志")

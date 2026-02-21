@@ -181,7 +181,8 @@ def render_dual(env, path_loss_map=None, save_path=None):
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.show()
+    if not save_path:
+        plt.show()
     return fig
 
 
@@ -371,5 +372,7 @@ def render_animation_dual(
             )
             print(f"GIF 已保存: {save_gif_path} (共 {len(frames_pil)} 帧)")
 
-    plt.show()
+    # 仅在不保存到文件时尝试显示（保存时多为 agg 后端，plt.show() 会报警）
+    if not (save_gif_path or save_last_frame_path):
+        plt.show()
     return anim

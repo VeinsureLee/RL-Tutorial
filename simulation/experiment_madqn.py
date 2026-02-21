@@ -3,11 +3,13 @@ import os
 import numpy as np
 import random
 
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加项目路径，并定义项目根目录（与 train.py 模型保存路径一致）
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
 from env.env import Env
-from rl_algorithms.madqn import MADQN, train_madqn
+from rl_algorithms.rl.madqn import MADQN
+from rl_algorithms.train import train_madqn
 from simulation.visualize_dual import render_dual, render_animation_dual
 
 
@@ -132,12 +134,12 @@ def train_madqn_model():
     
     # 训练模型
     print("\n开始训练...")
-    madqn, return_list, agent_return_lists = train_madqn(env, madqn)
+    madqn, return_list, agent_return_lists, _ber_list, _agent_ber_lists = train_madqn(env, madqn)
     
     # 保存模型
     print("\n保存模型...")
     os.makedirs("models", exist_ok=True)
-    model_path = os.path.join("models", "madqn_model_test.pth")
+    model_path = os.path.join(_ROOT, "models", "madqn_model.pth")
     madqn.save(model_path)
     print(f"模型已保存到: {model_path}")
     
@@ -155,11 +157,10 @@ def main():
     # 创建环境
     env = Env()
     
-    # 创建MADQN Agent并加载预训练权重
+    # 创建MADQN Agent并加载预训练权重（与 train.py 保存路径一致：models/madqn_model.pth）
     print("\n加载预训练的MADQN模型...")
-    model_path = os.path.join("models", "madqn_model_test04.pth")
-    fallback_model_path = os.path.join("models", "madqn_model.pth")
-    
+    model_path = os.path.join(_ROOT, "models", "madqn_model.pth")
+
     madqn = MADQN(
         env,
         lr=0.001,
@@ -180,19 +181,8 @@ def main():
         madqn.load(model_path)
         print(f"已加载模型: {model_path}")
     except FileNotFoundError:
-        try:
-            madqn.load(fallback_model_path)
-            model_path = fallback_model_path
-            print(f"已加载模型: {fallback_model_path}")
-        except FileNotFoundError:
-            print(f"未找到预训练模型文件: {model_path} 或 {fallback_model_path}")
-            print("开始训练新模型...")
-            # 如果找不到模型，先训练
-            madqn, return_list, agent_return_lists = train_madqn(env, madqn)
-            # 训练完成后保存模型
-            os.makedirs("models", exist_ok=True)
-            madqn.save(model_path)
-            print(f"模型已保存到: {model_path}")
+        print(f"未找到预训练模型文件，请先运行 rl_algorithms.train 训练并保存到 {model_path}")
+        return
     
     # 使用训练好的策略（设置epsilon为最小值）
     madqn.epsilon = madqn.epsilon_min
@@ -207,9 +197,11 @@ def main():
     print("开始渲染环境（热力图 + 普通图，图例在下方）")
     print("=" * 50)
     
-    os.makedirs("results", exist_ok=True)
-    gif_path = os.path.join("results/gif", "madqn_pretrained_test04.gif")
-    last_frame_path = os.path.join("results/png", "madqn_pretrained_test04_last_frame.png")
+    results_dir = os.path.join(_ROOT, "results")
+    os.makedirs(os.path.join(results_dir, "gif"), exist_ok=True)
+    os.makedirs(os.path.join(results_dir, "png"), exist_ok=True)
+    gif_path = os.path.join(results_dir, "gif", "madqn_pretrained_test04.gif")
+    last_frame_path = os.path.join(results_dir, "png", "madqn_pretrained_test04_last_frame.png")
     
     # 双视图静态图：热力图 + 普通图，地图上不显示 start/target，下方图例展示
     print("\n渲染双视图静态图（热力图 + 轨迹）...")

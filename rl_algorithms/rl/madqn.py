@@ -1,21 +1,14 @@
-import sys
+"""
+MADQN 模型模块：仅包含 MADQN 智能体类。
+训练与绘图见 train.py、plot.py。
+"""
 import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from env.env import Env
-from rl_algorithms.utils.agent import Agent
-
-from tqdm import tqdm
-import torch.nn.functional as F
-import torch.optim as optim
-import torch.nn as nn
-import torch
-from typing import List, Tuple, Any, Optional
-from collections import deque
-import random
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
+from rl_algorithms.utils.agent import Agent
 from rl_algorithms.net.qnet import Qnet
 from rl_algorithms.utils.replaybuffer import ReplayBuffer
 from rl_algorithms.utils.utils import state_to_idx_tensor
@@ -247,142 +240,3 @@ class MADQN(Agent):
                 checkpoint.get(f"target_qnet_{i}", checkpoint[f"qnet_{i}"]))
             self.optimizers[i].load_state_dict(checkpoint[f"optimizer_{i}"])
         self.epsilon = checkpoint.get("epsilon", self.epsilon)
-
-
-def train_madqn(env, madqn):
-    print(f"Begin to train MADQN, iteration: {madqn.iteration}")
-    epsilon = madqn.epsilon
-    return_list = []
-    # 记录每个agent的return列表
-    agent_return_lists = [[] for _ in range(madqn.num_agents)]
-    # 记录误码率：每 episode 平均 BER、每个 agent 每 episode 平均 BER
-    ber_list = []
-    agent_ber_lists = [[] for _ in range(madqn.num_agents)]
-
-    for i in range(madqn.iteration):
-        madqn.epsilon = epsilon
-        # 使用tqdm创建进度条
-        pbar = tqdm(range(1, madqn.num_episodes + 1),
-                    desc=f"Iteration({i+1}) progress", unit="episode")
-        for ep in pbar:
-            states, _ = env.reset()
-            # 处理单个 agent 的情况（向后兼容）
-            if env.num_agents == 1:
-                states = [states]
-
-            # 跟踪每个agent的return（到达目的地后不再增加）
-            agent_returns = [0.0] * madqn.num_agents
-            # 跟踪每个agent是否已到达目的地
-            agent_arrived = [False] * madqn.num_agents
-            # 跟踪每 step 的 BER 累加，用于计算 episode 平均误码率
-            episode_ber_sum = 0.0
-            episode_ber_sum_per_agent = [0.0] * madqn.num_agents
-            step_count = 0
-
-            ep_return = 0
-            for t in range(madqn.episode_length):
-                # 所有 agent 一起选择动作（每个agent只向自己的target移动）
-                action_indices = madqn.take_action(states, training=True)
-                actions = [env.action_space[action_idx]
-                           for action_idx in action_indices]
-
-                # 执行动作
-                step_result = env.step(actions)
-                next_states, rewards, dones, info = step_result
-                # 从 info 中取误码率（env.step 返回 ber_per_agent），累加用于计算平均误码率
-                ber_this = info.get("ber", info.get("ber_per_agent", [0.5] * madqn.num_agents))
-                episode_ber_sum += np.mean(ber_this)
-                for j in range(madqn.num_agents):
-                    episode_ber_sum_per_agent[j] += ber_this[j]
-                step_count += 1
-
-                # 处理单个 agent 的情况（向后兼容）
-                if env.num_agents == 1:
-                    next_states = [next_states]
-                    rewards = [rewards]
-                    dones = [dones]
-
-                # 更新每个agent的return
-                for agent_id in range(madqn.num_agents):
-                    # 如果agent刚到达目的地（之前未到达，现在done了）
-                    if not agent_arrived[agent_id] and dones[agent_id]:
-                        agent_arrived[agent_id] = True
-                        # 到达目的地时的reward计入return
-                        agent_returns[agent_id] += rewards[agent_id]
-                    elif not agent_arrived[agent_id]:
-                        # 如果还未到达目的地，继续累加reward
-                        agent_returns[agent_id] += rewards[agent_id]
-                    # 如果已经到达目的地，不再累加reward（即使还在原地）
-
-                ep_return = sum(agent_returns)  # 总回报是所有 agent 的回报之和
-
-                # 存储经验到对应的 buffer
-                for agent_id in range(madqn.num_agents):
-                    madqn.buffer[agent_id].add(
-                        states[agent_id],
-                        action_indices[agent_id],
-                        rewards[agent_id],
-                        next_states[agent_id],
-                        dones[agent_id]
-                    )
-
-                    # 更新网络（每个agent只考虑自己的target）
-                    if len(madqn.buffer[agent_id]) >= madqn.mini_batch_size:
-                        madqn.update(agent_id)
-
-                states = next_states
-
-                # 更新目标网络
-                if t % madqn.update_freq == 0:
-                    for agent_id in range(madqn.num_agents):
-                        madqn.update_target_qnet(agent_id)
-
-                # 如果所有 agent 都完成，则结束
-                if all(dones):
-                    break
-
-            return_list.append(ep_return)
-            # 记录每个agent的return
-            for agent_id in range(madqn.num_agents):
-                agent_return_lists[agent_id].append(agent_returns[agent_id])
-            # 记录误码率：本 episode 平均误码率（对 step 取平均）
-            episode_avg_ber = episode_ber_sum / step_count if step_count > 0 else 0.0
-            ber_list.append(episode_avg_ber)
-            for j in range(madqn.num_agents):
-                agent_avg_ber = episode_ber_sum_per_agent[j] / step_count if step_count > 0 else 0.0
-                agent_ber_lists[j].append(agent_avg_ber)
-
-            # epsilon **按 episode 衰减**
-            madqn.epsilon = max(madqn.epsilon_min,
-                                madqn.epsilon * madqn.epsilon_decay)
-
-            # 构建进度条显示信息：显示每个agent的return
-            return_str = ', '.join(
-                [f'A{i+1}:{r:.2f}' for i, r in enumerate(agent_returns)])
-            pbar.set_postfix({
-                'Episode': ep,
-                'Total Return': f'{ep_return:.2f}',
-                'Agent Returns': return_str,
-                'Epsilon': f'{madqn.epsilon:.3f}'
-            })
-    return madqn, return_list, agent_return_lists, ber_list, agent_ber_lists
-
-
-if __name__ == "__main__":
-    env = Env()
-    madqn = MADQN(
-        env,
-        lr=1e-3,
-        gamma=0.99,
-        iteration=5,
-        epsilon=0.5,
-        epsilon_decay=0.95,   # 按 episode
-        epsilon_min=0.1,
-        num_episodes=50,
-        episode_length=5000,
-        mini_batch_size=64,
-        update_freq=10
-    )
-
-    madqn, return_list, agent_return_lists = train_madqn(env, madqn)
-    madqn.save("models/madqn_model_test.pth")

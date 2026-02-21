@@ -3,12 +3,13 @@ import os
 import numpy as np
 import random
 
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加项目路径，并定义项目根目录（与 train.py 模型保存路径一致）
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
 from env.env import Env
 from rl_algorithms.utils.agent import Agent
-from rl_algorithms.dqn import DQN
+from rl_algorithms.rl.dqn import DQN
 from simulation.visualize_dual import render_dual, render_animation_dual
 
 
@@ -125,10 +126,9 @@ def main():
     # 创建环境
     env = Env()
     
-    # 创建DQN Agent并加载预训练权重
+    # 创建DQN Agent并加载预训练权重（与 train.py 保存路径一致：models/dqn_model.pth）
     print("\n加载预训练的DQN模型...")
-    model_path = os.path.join("models", "dqn_model_test.pth")
-    fallback_model_path = os.path.join("models", "dqn_model_test.pth")
+    model_path = os.path.join(_ROOT, "models", "dqn_model.pth")
     dqn = DQN(env, agent_id=0, lr=0.001, gamma=0.99, iteration=10,
               epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995,
               num_episodes=50, episode_length=2000, batch_size=64, 
@@ -138,13 +138,8 @@ def main():
         dqn.load(model_path)
         print(f"已加载模型: {model_path}")
     except FileNotFoundError:
-        try:
-            dqn.load(fallback_model_path)
-            model_path = fallback_model_path
-            print(f"已加载模型: {fallback_model_path}")
-        except FileNotFoundError:
-            print(f"未找到预训练模型文件，请将文件放在 {model_path} 或 {fallback_model_path}")
-            return
+        print(f"未找到预训练模型文件，请先运行 rl_algorithms.train 训练并保存到 {model_path}")
+        return
     
     # 使用训练好的策略（固定epsilon）
     dqn.epsilon = dqn.epsilon_min
@@ -159,9 +154,11 @@ def main():
     print("开始渲染环境（热力图 + 普通图，图例在下方）")
     print("=" * 50)
     
-    os.makedirs("results", exist_ok=True)
-    gif_path = os.path.join("results/gif", "dqn_pretrained_test.gif")
-    last_frame_path = os.path.join("results/png", "dqn_pretrained_test_last_frame.png")
+    results_dir = os.path.join(_ROOT, "results")
+    os.makedirs(os.path.join(results_dir, "gif"), exist_ok=True)
+    os.makedirs(os.path.join(results_dir, "png"), exist_ok=True)
+    gif_path = os.path.join(results_dir, "gif", "dqn_pretrained_test.gif")
+    last_frame_path = os.path.join(results_dir, "png", "dqn_pretrained_test_last_frame.png")
     
     # 双视图静态图：热力图 + 普通图，地图上不显示 start/target，下方图例展示
     print("\n渲染双视图静态图（热力图 + 轨迹）...")

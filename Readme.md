@@ -26,8 +26,8 @@ The project implements two reinforcement learning (RL) algorithms for navigation
 
 ### 1.3 How to Run
 
-- **Train DQN:** run `rl_algorithms/dqn.py` or use `simulation/experiment_dqn.py` (single-agent).
-- **Train MADQN:** run `rl_algorithms/madqn.py` or use `simulation/experiment_madqn.py` (multi-agent).
+- **Train:** run `python -m rl_algorithms.train`（在项目根目录下；脚本内可选算法 `dqn` 或 `madqn`）。模型与日志保存到项目根目录下 `models/` 与日志目录，训练曲线保存到 `rl_algorithms/plot/figs`（可手动复制到 `results/Train/` 用于展示）。
+- **Test / 测试与可视化:** 先训练得到 `models/dqn_model.pth` 或 `models/madqn_model.pth` 后，运行 `simulation/experiment_dqn.py`（单智能体）或 `simulation/experiment_madqn.py`（多智能体），轨迹与截图将保存到项目根目录下 `results/gif/`、`results/png/`。
 
 After training, load the saved model and run evaluation/visualization (e.g., render trajectories and save GIFs/PNGs under `results/`).
 
@@ -39,13 +39,13 @@ Training curves and metrics are stored in `results/Train/`.
 
 | DQN Training Curve |
 |--------------------|
-| <img src="results/Train/dqn.png" width="320" alt="DQN training curve" /> |
+| <img src="results/Train/dqn/dqn_return.png" width="320" alt="DQN training curve" /> |
 
 **MADQN (4-Agent)**
 
 | MADQN 4-Agent Return | MADQN 4-Agent BER |
 |----------------------|-------------------|
-| <img src="results/Train/madqn_4_return.png" width="320" alt="MADQN return" /> | <img src="results/Train/madqn_4_ber.png" width="320" alt="MADQN BER" /> |
+| <img src="results/Train/madqn_4/madqn_return.png" width="320" alt="MADQN return" /> | <img src="results/Train/madqn_4/madqn_ber.png" width="320" alt="MADQN BER" /> |
 
 *DQN training curve; MADQN 4-agent episodic return and BER (Bit Error Rate) during training.*
 
