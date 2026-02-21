@@ -94,10 +94,13 @@ class _EnvArgs:
 def get_env_config() -> dict:
     """
     从 yml 加载环境所需全部配置（config/base + config/dynamic 场景）。
+    若 config/base/map.yml 的 number_of_robots 与 config/dynamic/agent_num.yml 不一致
+    或 agent_num.yml 不存在，则重新生成 config/dynamic 下各文件。
     :return: dict，包含 map_size, grid_size, start_states, target_states, forbidden_areas,
              action_space, reward_*, los_nlos_grid, map_config_map_size, antenna_position 等。
     """
-    from config.generator.main import load_scenario_from_dynamic
+    from config.generator.main import load_scenario_from_dynamic, get_or_create_map_and_agents
+    from utils.config_handler import load_yml
 
     _env_yml = _load_base_yml("env")
     _map_yml = _load_base_yml("map")
@@ -107,8 +110,30 @@ def get_env_config() -> dict:
     map_size = tuple(map_size) if isinstance(map_size, list) else map_size
     map_size = np.array(map_size, dtype=np.float64)
 
+    # agent num 判断：map.yml 的 number_of_robots 与 agent_num.yml 一致则直接加载，否则重新生成 dynamic
+    map_num_agents = int(_get_yml_value(_map_yml, "number_of_robots", 4))
+    dynamic_dir = get_abs_path("config/dynamic")
+    agent_num_path = os.path.join(dynamic_dir, "agent_num.yml")
+    stored_agent_num = None
+    if os.path.isfile(agent_num_path):
+        stored = load_yml(agent_num_path)
+        if isinstance(stored, dict) and "num_agents" in stored:
+            stored_agent_num = int(stored["num_agents"])
+    if stored_agent_num is None or stored_agent_num != map_num_agents:
+        base = get_base_map_and_seed()
+        get_or_create_map_and_agents(
+            random_seed=base["random_seed"],
+            num_agents=map_num_agents,
+            map_size=base["map_size"],
+            antenna_position=base["antenna_position"],
+            num_forbidden_squares=base["num_forbidden_squares"],
+            square_size_range=base["square_size_range"],
+            dynamic_dir=dynamic_dir,
+            force_regenerate=True,
+        )
+
     scenario = load_scenario_from_dynamic(
-        dynamic_dir=get_abs_path("config/dynamic"),
+        dynamic_dir=dynamic_dir,
         map_size=map_size,
     )
     if scenario is None:

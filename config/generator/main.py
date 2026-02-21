@@ -31,6 +31,8 @@ from config.generator.discretization import (
     FILENAME_DISCRETE_MAP,
 )
 
+FILENAME_AGENT_NUM = "agent_num.yml"
+
 
 def _dynamic_dir() -> str:
     return get_abs_path("config/dynamic")
@@ -68,6 +70,11 @@ def _write_yml_files(
         if key not in scenario or scenario[key] is None:
             continue
         save_yml(_file_path(dynamic_dir, filename), _to_serializable(scenario[key]))
+
+
+def _write_agent_num(dynamic_dir: str, num_agents: int) -> None:
+    """将 agent 数量暂存到 config/dynamic/agent_num.yml。"""
+    save_yml(_file_path(dynamic_dir, FILENAME_AGENT_NUM), {"num_agents": num_agents})
 
 
 def _is_dynamic_complete(dynamic_dir: str) -> bool:
@@ -206,6 +213,7 @@ def get_or_create_map_and_agents(
         "los_nlos_grid": discrete["los_nlos_grid"],
     }
     _write_yml_files(dynamic_dir, scenario)
+    _write_agent_num(dynamic_dir, num_agents)
 
     # 5) 离散化 O(1) 查询：构建并保存 StateLookup
     state_lookup = build_state_lookup(

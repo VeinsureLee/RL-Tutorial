@@ -81,6 +81,17 @@ class Env:
         self.reward_step = float(env_config["reward_step"])
         self.reward_closer_to_target = float(env_config["reward_closer_to_target"])
 
+        # 初始化时输出加载信息（重要信息展示，信道参数仅显示加载完毕）
+        print("---------- 环境加载 ----------")
+        print(f"  agent num:     {self.num_agents}")
+        print(f"  map_size:      {self.map_size[0]:.0f} x {self.map_size[1]:.0f}")
+        print(f"  grid_size:     {self.grid_size}")
+        print(f"  grid (rows x cols): {self.grid_rows} x {self.grid_cols}")
+        print(f"  action_dim:    {self.action_dim}")
+        print(f"  起点数量:      {len(self.start_states)},  终点数量: {len(self.target_states)}")
+        print("  信道参数:      加载完毕")
+        print("------------------------------")
+
     def _continuous_to_discrete(self, state):
         """
         将连续坐标转换为离散网格坐标，处理浮点运算问题
