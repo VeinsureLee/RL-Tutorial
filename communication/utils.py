@@ -1,4 +1,4 @@
-from config.param_arguments import parser
+from config.yml_config import _get_parser
 import math
 import numpy as np
 
@@ -22,7 +22,7 @@ def judge_los_nlos(x_list, y_list, map):
 
 
 def distances_calculation(points):
-    antenna_position = parser.parse_args().antenna_position
+    antenna_position = _get_parser().parse_args().antenna_position
     return np.linalg.norm(points - antenna_position, axis=1)
 
 

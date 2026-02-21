@@ -17,8 +17,11 @@ from communication.channel import (
 from communication.diagonalization_precoding import matrix_cal
 from communication.SIC import compute_sinr, epsilon, allocate_power, ber_to_reward, get_noma_powers
 
-from config.param_arguments import parser as param_parser
-from config.map_config import map_size as map_config_map_size, get_los_nlos as map_get_los_nlos
+from config.yml_config import (
+    _get_parser,
+    get_map_and_scenario,
+    _get_env_parser,
+)
 
 try:
     from env.env import Env
@@ -29,8 +32,7 @@ except ImportError:
 def _get_grid_size():
     """从环境参数获取网格物理尺寸（米），若无则使用默认 0.4"""
     try:
-        from config.env_arguments import env_parser
-        return float(env_parser.parse_args().grid_size)
+        return float(_get_env_parser().parse_args().grid_size)
     except Exception:
         return 0.4
 
@@ -49,7 +51,7 @@ def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None,
     :return: (rewards_ber, ber_per_agent, sinr_per_agent)，分别为 -log(ber) 列表、误码率列表、SINR 列表（线性值）
     """
     if P_max is None:
-        P_max = param_parser.parse_args().P_max
+        P_max = _get_parser().parse_args().P_max
     num_agents = len(agent_states)
     if num_agents == 0:
         return [], [], []
@@ -111,7 +113,7 @@ def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None,
             w_single = w_single[:, 0] / np.linalg.norm(w_single[:, 0])
             g = np.abs(np.dot(H_single.ravel(), w_single.ravel())) ** 2
             from communication.utils import dbm2watt
-            sigma = dbm2watt(param_parser.parse_args().power_AWGN)
+            sigma = dbm2watt(_get_parser().parse_args().power_AWGN)
             sigma = max(sigma, 1e-25)  # 与 SIC 一致，仅防除零，不覆盖 -143 dBm/Hz 对应的 ~5e-18 W
             sinr = (P_max / 2) * g / sigma
             if verbose_sinr:
@@ -287,12 +289,14 @@ def test_ber_random_agents(seed=None):
     """
     if seed is not None:
         np.random.seed(seed)
-    # 每次调用时重新解析，确保能读到最新的 config（或命令行 --P_max）
-    args = param_parser.parse_args()
+    # 从 yml 读取信道与环境配置
+    args = _get_parser().parse_args()
     num_agents = args.number_of_robots
     antenna_position = np.asarray(args.antenna_position, dtype=np.float64).reshape(2)
     P_max = args.P_max
     grid_size = _get_grid_size()
+    _, _, map_get_los_nlos, _, _ = get_map_and_scenario()
+    map_config_map_size = _get_env_parser().parse_args().map_config_map_size
     rows, cols = map_config_map_size[0], map_config_map_size[1]
 
     # 在网格内随机生成 num_agents 个不重复的格点

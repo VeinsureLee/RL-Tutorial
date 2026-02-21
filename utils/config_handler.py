@@ -61,8 +61,8 @@ def load_env_config(config_path: str = None, encoding: str = "utf-8"):
 def load_agent_config(
     config_path: str = None, encoding: str = "utf-8"
 ):
-    """加载智能体配置 (config/agent.yml)。"""
-    path = config_path or get_abs_path("config/agent.yml")
+    """加载智能体相关配置。默认加载 config/dynamic/start_states.yml；完整场景请用 config.generator.main.load_scenario_from_dynamic。"""
+    path = config_path or get_abs_path("config/dynamic/start_states.yml")
     return _load_yml(path, encoding)
 
 def load_random_seed_config(config_path: str = None, encoding: str = "utf-8"):
@@ -107,7 +107,6 @@ def print_params_settings(
     channel_path: str = None,
     map_path: str = None,
     env_path: str = None,
-    agent_path: str = None,
     random_seed_path: str = None,
     encoding: str = "utf-8",
 ):

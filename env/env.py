@@ -6,17 +6,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from config.env_arguments import env_parser
-from config.map_config import (
-    los_nlos_grid,
-    get_los_nlos as _map_get_los_nlos,
-    map_size as map_config_map_size,
-)
-from config.param_arguments import parser as param_parser
+from config.yml_config import get_env_config
+from config.generator.region_generator import get_los_nlos as _map_get_los_nlos
 from communication.main import get_ber_reward
 from PIL import Image
 import io
 from tqdm import tqdm
+
+
+# 兼容：对外保留同名函数，内部使用 config.yml_config
+def load_env_config_from_yml():
+    """从 yml 加载环境配置，委托给 config.yml_config.get_env_config。"""
+    return get_env_config()
 
 
 # 设置matplotlib支持中文
@@ -25,62 +26,60 @@ plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
 class Env:
-    def __init__(self, env_parser=env_parser):
+    def __init__(self, env_config=None):
+        """
+        :param env_config: 可选。若为 None，则通过 load_env_config_from_yml() 从 yml 加载配置。
+                           也可传入由 load_env_config_from_yml() 返回的 dict 或兼容 dict。
+        """
         self.traj = []  # 存储所有agent的轨迹，traj[i]是第i个agent的轨迹列表
         self.render_frames = []  # 存储每一帧的渲染数据
 
-        # 获取环境参数
-        args = env_parser.parse_args()
-        self.map_size = np.array(args.map_size, dtype=np.float64)  # 地图实际尺寸
-        self.grid_size = float(args.grid_size)  # 网格大小
-        
-        # 将地图按照grid_size离散化，计算网格数量（使用round避免浮点误差）
+        if env_config is None:
+            env_config = get_env_config()
+
+        self.map_size = np.array(env_config["map_size"], dtype=np.float64)
+        self.grid_size = float(env_config["grid_size"])
+
         self.grid_rows = int(round(self.map_size[0] / self.grid_size))
         self.grid_cols = int(round(self.map_size[1] / self.grid_size))
         self.size = (self.grid_rows, self.grid_cols)
         self.x_dim = self.grid_rows
         self.y_dim = self.grid_cols
         self.state_num = self.x_dim * self.y_dim
-        self.action_dim = len(args.action_space)
+        self.action_space = list(env_config["action_space"])
+        self.action_dim = len(self.action_space)
 
-        # 将连续坐标转换为离散网格坐标
-        start_state_raw = self._continuous_to_discrete(args.start_states)
-        target_state_raw = self._continuous_to_discrete(args.target_state)  # 注意：参数名是target_state（单数）
-        
-        # 处理多agent情况：保存所有agent的起始和目标状态
+        start_state_raw = self._continuous_to_discrete(env_config["start_states"])
+        target_state_raw = self._continuous_to_discrete(env_config["target_states"])
+
         if isinstance(start_state_raw, list):
-            self.start_states = start_state_raw  # 所有agent的起始状态列表
+            self.start_states = start_state_raw
             self.num_agents = len(start_state_raw)
         else:
-            # 单个agent的情况（向后兼容）
             self.start_states = [start_state_raw]
             self.num_agents = 1
-            
+
         if isinstance(target_state_raw, list):
-            self.target_states = target_state_raw  # 所有agent的目标状态列表
+            self.target_states = target_state_raw
         else:
-            # 单个agent的情况（向后兼容）
             self.target_states = [target_state_raw]
-            
-        # 为了向后兼容，保留单个agent的属性
+
         self.start_state = self.start_states[0] if len(self.start_states) > 0 else None
         self.target_state = self.target_states[0] if len(self.target_states) > 0 else None
-            
-        self.forbidden_states = self._process_forbidden_states(args.forbidden_areas)
 
-        # 地图 LOS/NLOS 信息（来自 map_config 的离散化网格）
-        self._los_nlos_grid = los_nlos_grid
-        self._map_config_map_size = tuple(map_config_map_size)  # (rows, cols)
+        self.forbidden_states = self._process_forbidden_states(env_config["forbidden_areas"])
 
-        # 所有agent的当前状态
+        self._los_nlos_grid = env_config["los_nlos_grid"]
+        self._map_config_map_size = tuple(env_config["map_config_map_size"])
+        self._antenna_position = env_config["antenna_position"]
+
         self.agent_states = self.start_states.copy()
-        self.num_actions = len(args.action_space)
-        self.action_space = args.action_space
+        self.num_actions = len(self.action_space)
 
-        self.reward_target = args.reward_target
-        self.reward_forbidden = args.reward_forbidden
-        self.reward_step = args.reward_step
-        self.reward_closer_to_target = args.reward_closer_to_target
+        self.reward_target = float(env_config["reward_target"])
+        self.reward_forbidden = float(env_config["reward_forbidden"])
+        self.reward_step = float(env_config["reward_step"])
+        self.reward_closer_to_target = float(env_config["reward_closer_to_target"])
 
     def _continuous_to_discrete(self, state):
         """
@@ -183,12 +182,11 @@ class Env:
             dones.append(done)
 
         # 根据 next_states 计算每个 agent 的 LOS/NLOS、分簇、功率分配与误码率，误码率放入 info
-        antenna_position = param_parser.parse_args().antenna_position
         try:
             _, ber_per_agent, sinr_per_agent = get_ber_reward(
                 next_states,
                 self.grid_size,
-                antenna_position,
+                self._antenna_position,
                 get_los_nlos=self.get_los_nlos,
             )
             info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": sinr_per_agent}

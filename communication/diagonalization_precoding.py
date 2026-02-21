@@ -3,11 +3,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from config.param_arguments import parser
+from config.yml_config import _get_parser
 from .channel import *
 
-
-number_of_antenna = parser.parse_args().number_of_antenna
+number_of_antenna = _get_parser().parse_args().number_of_antenna
 
 
 def matrix_cal(cluster_list, m):

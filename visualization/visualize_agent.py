@@ -8,11 +8,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from config.env_arguments import env_parser
+from config.yml_config import _get_env_parser
 
-
-args = env_parser.parse_args()
-map_size = args.map_size
+args = _get_env_parser().parse_args()
+map_size = tuple(int(x) for x in args.map_size) if hasattr(args.map_size, '__iter__') else args.map_size
 forbidden_areas = args.forbidden_areas
 start_states = args.start_states
 target_states = args.target_state

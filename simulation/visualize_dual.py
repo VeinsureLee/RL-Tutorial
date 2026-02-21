@@ -15,8 +15,12 @@ from tqdm import tqdm
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.map_config import map_size as config_map_size
-from config.param_arguments import parser as param_parser
+from config.yml_config import get_channel_config, get_map_and_scenario
+
+_param_parser = get_channel_config()
+_config_map_size, _, _, _, _ = get_map_and_scenario()
+config_map_size = tuple(int(x) for x in _config_map_size)
+param_parser = _param_parser
 
 # 各 agent 使用的颜色与风格（与右图一致）
 COLORS = ["blue", "orange", "purple", "brown", "pink", "gray", "olive", "cyan"]
@@ -24,7 +28,7 @@ COLORS = ["blue", "orange", "purple", "brown", "pink", "gray", "olive", "cyan"]
 
 def _get_antenna_pos_for_env(env):
     """将 map_config 下的天线坐标按 env 网格尺寸缩放。"""
-    ant = param_parser.parse_args().antenna_position
+    ant = _param_parser.parse_args().antenna_position
     config_rows, config_cols = config_map_size[0], config_map_size[1]
     r_scale = env.grid_rows / max(1, config_rows)
     c_scale = env.grid_cols / max(1, config_cols)

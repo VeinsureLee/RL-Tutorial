@@ -7,16 +7,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 from communication.channel import path_loss
-from config.map_config import map_size, get_los_nlos, antenna_position
-from config.env_arguments import env_parser
+from config.yml_config import get_map_and_scenario, _get_env_parser
 
 
 def _get_grid_size_m():
     """获取网格物理边长（米），默认 0.4。"""
     try:
-        return float(env_parser.parse_args().grid_size)
+        return float(_get_env_parser().parse_args().grid_size)
     except Exception:
         return 0.4
+
+
+def _get_map_and_los_nlos():
+    """延迟加载地图与 LOS/NLOS 函数。"""
+    map_size, forbidden_areas, get_los_nlos, antenna_position, _ = get_map_and_scenario()
+    return map_size, get_los_nlos, antenna_position
 
 
 class RadioMap:
@@ -34,12 +39,13 @@ class RadioMap:
         :param grid_size_m: 每个格点对应的物理边长（米），默认使用 env_arguments.grid_size（如 0.4）
         :param antenna_pos: 天线/基站在地图上的离散坐标 (x, y)，默认使用 map_config.antenna_position
         """
-        self.map_size = tuple(map_size_) if map_size_ is not None else tuple(map_size)
+        _ms, _get_ln, _ap = _get_map_and_los_nlos()
+        self.map_size = tuple(map_size_) if map_size_ is not None else tuple(_ms)
         self.grid_size_m = grid_size_m if grid_size_m is not None else _get_grid_size_m()
         if antenna_pos is not None:
             self.antenna_pos = (int(antenna_pos[0]), int(antenna_pos[1]))
         else:
-            self.antenna_pos = (int(antenna_position[0]), int(antenna_position[1]))
+            self.antenna_pos = (int(_ap[0]), int(_ap[1]))
         self.path_loss_map = None
 
     def build_path_loss_map(self, los_nlos_getter=None):
@@ -49,6 +55,7 @@ class RadioMap:
         :return: 2D 数组，形状为 map_size，单位为 dB
         """
         rows, cols = self.map_size[0], self.map_size[1]
+        _, get_los_nlos, _ = _get_map_and_los_nlos()
         get_region = los_nlos_getter if los_nlos_getter is not None else get_los_nlos
         pl_map = np.zeros((rows, cols), dtype=np.float64)
 

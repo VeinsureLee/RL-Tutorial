@@ -3,16 +3,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from config.param_arguments import parser
-from config.env_arguments import env_parser
+from config.yml_config import get_channel_config, _get_env_parser
 import math
 
-
-sigma = parser.parse_args().sigma_rayleigh
-freq = parser.parse_args().carrier_frequency
-number_of_antenna = parser.parse_args().number_of_antenna
-antenna_position = parser.parse_args().antenna_position
-grid_size = float(env_parser.parse_args().grid_size)
+_channel = get_channel_config().parse_args()
+_env = _get_env_parser().parse_args()
+sigma = _channel.sigma_rayleigh
+freq = _channel.carrier_frequency
+number_of_antenna = _channel.number_of_antenna
+antenna_position = _channel.antenna_position
+grid_size = float(_env.grid_size)
 
 
 def _distance_from_state(state, antenna_pos, grid_size_m):

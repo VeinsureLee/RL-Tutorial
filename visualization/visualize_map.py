@@ -8,7 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from config.map_config import map_size, forbidden_areas
+from config.yml_config import get_map_and_scenario
+
+_map_size, _forbidden_areas, _, _, _ = get_map_and_scenario()
+map_size = tuple(int(x) for x in _map_size)
+forbidden_areas = _forbidden_areas
 
 
 # visualize the forbidden areas by matplotlib

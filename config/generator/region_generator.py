@@ -5,7 +5,7 @@
 from typing import Union, List, Tuple, Set, Optional
 import numpy as np
 
-from config.obstacle_generator import build_obstacle_grid
+from config.generator.forbidden_generator import build_obstacle_grid
 
 
 def _bresenham_line(x0: int, y0: int, x1: int, y1: int) -> List[Tuple[int, int]]:

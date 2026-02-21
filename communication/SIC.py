@@ -3,15 +3,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from config.param_arguments import parser
+from config.yml_config import _get_parser
 from communication.utils import *
 from scipy.special import erfc
 
-
-noise_power_dbm = parser.parse_args().power_AWGN
+_parser = _get_parser().parse_args()
+noise_power_dbm = _parser.power_AWGN
 noise_power = dbm2watt(noise_power_dbm)
-channel_block_length = parser.parse_args().channel_block_length
-packet_size = parser.parse_args().packet_size
+channel_block_length = _parser.channel_block_length
+packet_size = _parser.packet_size
 
 
 def compute_sinr(h1, h2, w, P1, P2, verbose=False):
@@ -77,7 +77,7 @@ def allocate_power(total_power, g_strong, g_weak, rho_min=None):
     :return: (P1, P2) 强用户、弱用户功率
     """
     if rho_min is None:
-        rho_min = parser.parse_args().rho_min
+        rho_min = _parser.rho_min
     # 弱用户分配更多：P2 > P1，且 (P2 - P1) * g_strong >= rho_min
     # P1 + P2 = total_power => P2 = total_power - P1
     # (total_power - 2*P1) * g_strong >= rho_min => P1 <= (total_power*g_strong - rho_min) / (2*g_strong)
@@ -108,7 +108,7 @@ def get_noma_powers(P_max, p, P_min=None):
     :return: (large_powers, small_powers)，各为长度 p 的数组
     """
     if P_min is None:
-        P_min = parser.parse_args().P_min
+        P_min = _parser.P_min
     P_max = max(float(P_max), P_min)
     large_powers = np.array([P_max / (2 ** (p + k)) for k in range(p)], dtype=np.float64)
     small_powers = np.array([P_max / (2 ** (k + 1)) for k in range(p)], dtype=np.float64)
