@@ -14,7 +14,125 @@
 pip install -r requirements.txt
 ```
 
-### 1.2 算法
+### 1.2 项目结构
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TB
+ subgraph EntryLayer["入口层"]
+        A["main.py<br>命令行入口<br>--model / --mode 参数调度"]
+  end
+ subgraph ConfigLayer["配置层"]
+    direction TB
+        C4["yml_config.py<br>YAML加载/解析"]
+        C3["generator<br>动态配置生成"]
+        C2["dynamic<br>起点/禁区/LOS网格"]
+        C1["base<br>map/channel/env.yml"]
+  end
+ subgraph EnvModule["环境模块"]
+    direction TB
+        D3["visualization<br>地图/智能体可视化"]
+        D2["radio_map<br>无线电/路径损耗热力图"]
+        D1["env.py<br>RL网格环境<br>step()/奖励逻辑"]
+  end
+ subgraph CommModule["通信模块"]
+    direction TB
+        E3["main.py<br>BER计算 → 奖励转换"]
+        E2["预编码/SIC<br>NOMA分簇/功率分配"]
+        E1["channel.py<br>ABG/LOS-NLOS信道模型"]
+  end
+ subgraph EnvCommLayer["环境与通信核心层"]
+    direction TB
+        EnvModule
+        CommModule
+  end
+ subgraph RLLayer["强化学习算法层"]
+    direction TB
+        F4["plot<br>训练曲线绘制"]
+        F3["train/test<br>训练循环/测试脚本"]
+        F2["net<br>Q网络（状态/动作嵌入）"]
+        F1["structure<br>DQN / MADQN智能体"]
+        F5["utils<br>经验回放/状态处理"]
+  end
+ subgraph SupportLayer["支撑工具层"]
+    direction TB
+        G3["path_tool<br>项目路径管理"]
+        G2["config_handler<br>YAML读写"]
+        G1["logger_handler<br>日志记录（logs/）"]
+  end
+ subgraph OutputLayer["输出存储层"]
+    direction TB
+        H4["figs/<br>论文用系统图"]
+        H3["results/<br>测试GIF/PNG/训练曲线"]
+        H2["models/<br>dqn/madqn模型权重"]
+        H1["logs/<br>训练日志"]
+  end
+    C1 --> C4
+    C2 --> C4
+    C3 --> C4
+    D1 --> D2 & D3
+    E1 --> E2
+    E2 --> E3
+    D1 -- 调用BER计算 --> E3
+    E3 -- 返回奖励 --> D1
+    F5 --> F1
+    F1 --> F2
+    F2 --> F3
+    F3 --> F4
+    A -- 调度训练/测试 --> F1
+    C4 -- 提供地图/信道参数 --> D1
+    D1 -- 状态/奖励 --> F1
+    F3 -- 保存模型 --> H2
+    F4 -- 输出曲线 --> H3
+    G1 --> H1
+    D3 --> H3 & H4
+    G2 -.-> C4
+    G3 -.-> A
+
+     A:::entry
+     C1:::config
+     C2:::config
+     C3:::config
+     C4:::config
+     D1:::env_comm
+     D2:::env_comm
+     D3:::env_comm
+     E1:::env_comm
+     E2:::env_comm
+     E3:::env_comm
+     F5:::rl
+     F1:::rl
+     F2:::rl
+     F3:::rl
+     F4:::rl
+     G1:::support
+     G2:::support
+     G3:::support
+     H1:::output
+     H2:::output
+     H3:::output
+     H4:::output
+    classDef entry fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
+    classDef config fill:#f0f8fb,stroke:#13c2c2,stroke-width:2px
+    classDef env_comm fill:#fdf6e3,stroke:#faad14,stroke-width:2px
+    classDef rl fill:#f0f2f5,stroke:#722ed1,stroke-width:2px
+    classDef support fill:#fef0f0,stroke:#f5222d,stroke-width:2px
+    classDef output fill:#f6ffed,stroke:#52c41a,stroke-width:2px
+```
+
+| 模块 | 作用 |
+|------|------|
+| **main.py** | 命令行入口：`--model dqn\|madqn`、`--mode train\|test`；创建环境，执行训练或加载后测试。 |
+| **config** | 基于 YAML 的环境/信道/地图配置；generator 生成动态配置与 LOS/NLOS 网格。 |
+| **env** | 网格环境与 step/奖励；将通信 BER 纳入奖励；无线电地图与简单可视化。 |
+| **communication** | 信道（路径损耗）、NOMA 分簇、对角化预编码、SIC、SINR/BER 与奖励。 |
+| **rl_algorithms** | DQN/MADQN 智能体、训练循环、测试脚本、Q 网络、经验回放、训练曲线。 |
+| **utils** | 日志、YAML 读写、项目路径工具。 |
+
+### 1.3 算法
 
 本项目在通信感知多机器人场景下实现了两种强化学习（RL）导航算法。
 
@@ -24,7 +142,7 @@ pip install -r requirements.txt
 - **MADQN（多智能体 DQN）**  
   多机器人导航，每个机器人拥有独立 Q 网络与经验回放。所有智能体并行决策，各自朝目标移动。每个智能体采用相同的 TD 学习与目标网络更新。环境奖励可包含基于 SIC 的 BER，从而在到达目标与保持链路质量之间优化轨迹。
 
-### 1.3 运行方法
+### 1.4 运行方法
 
 请在项目根目录下执行以下命令。
 
@@ -73,7 +191,7 @@ python -m rl_algorithms.test.test_madqn
 | 轨迹动画 GIF | `results/gif/`（如 `dqn_pretrained_test.gif`、`madqn_pretrained_test04.gif`） |
 | 最后一帧截图 | `results/png/`（如 `dqn_pretrained_test_last_frame.png`、`madqn_pretrained_test04_last_frame.png`） |
 
-### 1.4 训练结果示例
+### 1.5 训练结果示例
 
 训练曲线与指标存放在 `results/Train/`。
 
@@ -91,7 +209,7 @@ python -m rl_algorithms.test.test_madqn
 
 *DQN 训练曲线；MADQN 4 智能体训练过程中的回合回报与 BER（误码率）。*
 
-### 1.5 运行结果示例
+### 1.6 运行结果示例
 
 轨迹与最后一帧截图存放在 `results/`。
 
