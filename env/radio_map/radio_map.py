@@ -3,7 +3,9 @@ Radio Map 实现：基于 communication.channel 的 path loss 计算，并以热
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import numpy as np
 from communication.channel import path_loss
@@ -102,7 +104,6 @@ class RadioMap:
         ax.set_xlabel("Grid X")
         ax.set_ylabel("Grid Y")
         ax.set_title(title)
-        # 标明天线位置（离散坐标 (row,col) 对应 imshow 的 extent 下 (col+0.5, row+0.5) 为格心）
         ant_x, ant_y = self.antenna_pos[0], self.antenna_pos[1]
         ax.plot(ant_y + 0.5, ant_x + 0.5, "r*", markersize=12, label="Antenna")
         ax.legend(loc="upper right")
@@ -114,7 +115,6 @@ class RadioMap:
 
 
 if __name__ == "__main__":
-    # 示例：构建路径损耗图并显示热力图
     radio_map = RadioMap()
     pl_map = radio_map.build_path_loss_map()
     print("Path loss map shape:", pl_map.shape)

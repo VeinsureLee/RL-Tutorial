@@ -187,7 +187,7 @@ def _get_env_parser():
 
 
 # ---------------------------------------------------------------------------
-# 地图/场景：供 visualization、radio_map、simulation 等使用
+# 地图/场景：供 env.visualization、env.radio_map、rl_algorithms.test 等使用
 # ---------------------------------------------------------------------------
 
 def get_map_and_scenario():

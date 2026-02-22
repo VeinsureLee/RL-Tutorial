@@ -1,6 +1,6 @@
 """
 DQN 模型模块：仅包含 DQN 智能体类。
-训练与绘图见 train.py、plot.py。
+训练与绘图见 train、plot。
 """
 import os
 import numpy as np
