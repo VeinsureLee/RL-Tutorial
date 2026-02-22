@@ -21,6 +21,7 @@ pip install -r requirements.txt
 config:
   layout: elk
 ---
+%%{ init: { 'flowchart': { 'layout': 'dagre' } } }%%
 flowchart TB
  subgraph EntryLayer["Entry Layer"]
         A["main.py<br>CLI Entry<br>--model / --mode Dispatcher"]
