@@ -53,3 +53,6 @@ def visualize_map_with_agents(map_size, forbidden_areas, start_states, target_st
 
     plt.legend()
     plt.show()
+
+if __name__ == "__main__":
+    visualize_map_with_agents(map_size, forbidden_areas, start_states, target_states)

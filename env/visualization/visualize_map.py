@@ -34,3 +34,6 @@ def visualize_forbidden_areas(map_size, forbidden_areas):
     plt.ylabel('X coordinate')
     plt.show()
     return map_array
+
+if __name__ == "__main__":
+    visualize_forbidden_areas(map_size, forbidden_areas)
