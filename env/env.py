@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from config.yml_config import get_env_config
 from config.generator.region_generator import get_los_nlos as _map_get_los_nlos
-from communication.main import get_ber_reward
+from communication.ber_reward import get_ber_reward
 from PIL import Image
 import io
 from tqdm import tqdm
