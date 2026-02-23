@@ -3,7 +3,7 @@
 """
 import os
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 # 图表保存目录（与 plot.py 同级的 figs 文件夹）
