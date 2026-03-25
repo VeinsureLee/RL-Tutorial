@@ -1,0 +1,11 @@
+2026-03-25 23:33:37,094 - madqn - INFO - train_madqn.py:19 - 
+2026-03-25 23:33:37,095 - madqn - INFO - train_madqn.py:20 - ################################################################################
+2026-03-25 23:33:37,095 - madqn - INFO - train_madqn.py:21 - #                          MADQN 训练开始                                       #
+2026-03-25 23:33:37,095 - madqn - INFO - train_madqn.py:22 - ################################################################################
+2026-03-25 23:33:37,095 - madqn - INFO - train_madqn.py:23 - 训练参数: iteration=5, num_episodes=50, episode_length=5000, num_agents=4, lr=0.001, gamma=0.99, epsilon=0.5, epsilon_min=0.1, epsilon_decay=0.95, mini_batch_size=64, update_freq=10, device=cpu
+2026-03-25 23:33:37,096 - madqn - INFO - train_madqn.py:38 - ---------- Iteration 1/5 开始 ----------
+2026-03-25 23:33:45,610 - madqn - DEBUG - train_madqn.py:95 - Iter 1 Ep 1 | TotalReturn=-415.00 | AgentReturns=[A1:-151.00, A2:-35.00, A3:-129.00, A4:-100.00] | Epsilon=0.475
+2026-03-25 23:33:50,246 - madqn - DEBUG - train_madqn.py:95 - Iter 1 Ep 2 | TotalReturn=-129.00 | AgentReturns=[A1:-121.00, A2:-21.00, A3:7.00, A4:6.00] | Epsilon=0.451
+2026-03-25 23:33:54,698 - madqn - DEBUG - train_madqn.py:95 - Iter 1 Ep 3 | TotalReturn=-153.00 | AgentReturns=[A1:-166.00, A2:4.00, A3:-1.00, A4:10.00] | Epsilon=0.429
+2026-03-25 23:33:58,311 - madqn - DEBUG - train_madqn.py:95 - Iter 1 Ep 4 | TotalReturn=-127.00 | AgentReturns=[A1:-121.00, A2:0.00, A3:-4.00, A4:-2.00] | Epsilon=0.407
+2026-03-25 23:34:01,166 - madqn - DEBUG - train_madqn.py:95 - Iter 1 Ep 5 | TotalReturn=-47.00 | AgentReturns=[A1:-57.00, A2:6.00, A3:0.00, A4:4.00] | Epsilon=0.387
