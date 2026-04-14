@@ -74,22 +74,28 @@ def plot_madqn(return_list, agent_return_lists, ber_list, agent_ber_lists, save_
     plt.close()
     paths.append(p1)
 
-    # 误码率图
+    # 误码率图（log 刻度，clip 下限 1e-10，避免强用户 BER≈0 掩盖弱用户信息）
+    import numpy as np
+    ber_floor = 1e-10
+    ber_list_clipped = [max(b, ber_floor) for b in ber_list]
+
     plt.figure(figsize=(12, 6))
     plt.subplot(1, 2, 1)
-    plt.plot(range(1, len(ber_list) + 1), ber_list, label="平均误码率 (Avg BER)", linewidth=2)
+    plt.semilogy(range(1, len(ber_list_clipped) + 1), ber_list_clipped,
+                 label="平均误码率 (Avg BER)", linewidth=2)
     plt.xlabel(f'Episode (总计: {len(ber_list)})')
-    plt.ylabel('BER')
+    plt.ylabel('BER (log scale)')
     plt.title('MADQN 训练每回合平均误码率 vs Episode')
-    plt.grid(True, alpha=0.3)
+    plt.grid(True, alpha=0.3, which='both')
     plt.legend()
     plt.subplot(1, 2, 2)
     for agent_id, agent_bers in enumerate(agent_ber_lists):
-        plt.plot(range(1, len(agent_bers) + 1), agent_bers, label=f'Agent {agent_id + 1}')
+        clipped = [max(b, ber_floor) for b in agent_bers]
+        plt.semilogy(range(1, len(clipped) + 1), clipped, label=f'Agent {agent_id + 1}')
     plt.xlabel(f'Episode (总计: {len(ber_list)})')
-    plt.ylabel('BER')
+    plt.ylabel('BER (log scale)')
     plt.title('每个Agent每回合误码率 vs Episode')
-    plt.grid(True, alpha=0.3)
+    plt.grid(True, alpha=0.3, which='both')
     plt.legend(loc='best')
     plt.tight_layout()
     p2 = os.path.join(FIG_DIR, f"{save_prefix}_ber.png")

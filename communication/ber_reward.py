@@ -9,6 +9,7 @@ from communication.channel import (
     channel_vector,
     channel_group,
     path_loss_batch,
+    compute_arrival_angles,
 )
 from communication.diagonalization_precoding import matrix_cal
 from communication.SIC import compute_sinr, epsilon, ber_to_reward, get_noma_powers
@@ -54,7 +55,8 @@ def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None,
     distances = np.linalg.norm(positions - antenna_phys, axis=1)
     distances = np.maximum(distances, 1e-3)
     chn_paras = channel_parameter(distances, models=models)
-    thetas = np.pi / 2
+    # 根据 agent 与天线的几何位置计算各用户到达角，而非固定 π/2
+    thetas = compute_arrival_angles(positions, antenna_phys)
     chn_vcts = channel_vector(chn_paras, thetas)
     groups = channel_group(chn_vcts)
     large_group = groups["large_group"]
@@ -100,7 +102,8 @@ def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None,
         if w_single.size > 0 and np.linalg.norm(w_single) > 1e-12:
             w_single = w_single[:, 0] / np.linalg.norm(w_single[:, 0])
             g = np.abs(np.dot(H_single.ravel(), w_single.ravel())) ** 2
-            sigma = dbm2watt(_get_parser().parse_args().power_AWGN)
+            _args = _get_parser().parse_args()
+            sigma = dbm2watt(_args.power_AWGN) * getattr(_args, 'channel_bandwidth', 1.0e7)
             sigma = max(sigma, 1e-25)
             sinr = (P_max / 2) * g / sigma
             if verbose_sinr:

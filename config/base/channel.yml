@@ -15,15 +15,19 @@ number_of_antenna:
 
 power_AWGN:
   value: -143.0
-  description: "加性高斯白噪声功率 (dBm/Hz)"
+  description: "加性高斯白噪声功率谱密度 (dBm/Hz)"
+
+channel_bandwidth:
+  value: 1.0e+7
+  description: "信道带宽 (Hz)，默认 10 MHz，噪声总功率 = N0 * bandwidth"
 
 channel_block_length:
-  value: 256
-  description: "信道块长度"
+  value: 8
+  description: "信道块长度（有限块长 BER 公式中的 N）。N 越小，BER 对 SINR 越敏感；N=8 时 BER 在 0~10dB 范围有明显梯度"
 
 packet_size:
-  value: 16
-  description: "数据包大小"
+  value: 7
+  description: "数据包大小（有限块长 BER 公式中的 D）。D/N 为编码率，越接近 1 则 BER 越高"
 
 total_power:
   value: 1.0

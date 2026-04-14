@@ -9,7 +9,9 @@ from scipy.special import erfc
 
 _parser = _get_parser().parse_args()
 noise_power_dbm = _parser.power_AWGN
-noise_power = dbm2watt(noise_power_dbm)
+_noise_spectral_density = dbm2watt(noise_power_dbm)        # W/Hz
+_channel_bandwidth = getattr(_parser, 'channel_bandwidth', 1.0e7)  # Hz
+noise_power = _noise_spectral_density * _channel_bandwidth  # 总噪声功率 (W)
 channel_block_length = _parser.channel_block_length
 packet_size = _parser.packet_size
 

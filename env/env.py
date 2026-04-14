@@ -80,6 +80,7 @@ class Env:
         self.reward_forbidden = float(env_config["reward_forbidden"])
         self.reward_step = float(env_config["reward_step"])
         self.reward_closer_to_target = float(env_config["reward_closer_to_target"])
+        self.reward_ber_weight = float(env_config.get("reward_ber_weight", 1.0))
 
         # 初始化时输出加载信息（重要信息展示，信道参数仅显示加载完毕）
         print("---------- 环境加载 ----------")
@@ -202,7 +203,25 @@ class Env:
             )
             info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": sinr_per_agent}
         except Exception:
-            info = {"ber": [0.5] * self.num_agents, "ber_per_agent": [0.5] * self.num_agents, "sinr": [float("nan")] * self.num_agents}
+            ber_per_agent = [0.5] * self.num_agents
+            info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": [float("nan")] * self.num_agents}
+
+        # 通信质量奖励（tie-breaker）：
+        # 权重应远小于导航奖励，仅在"两条路都能靠近目标"时引导 agent 选 SINR 更优的方向。
+        # 已到达目标的 agent 不再获得通信奖励，避免干扰。
+        if self.reward_ber_weight > 0:
+            sinr_per_agent = info.get("sinr", [float("nan")] * self.num_agents)
+            for agent_id in range(self.num_agents):
+                if dones[agent_id]:
+                    continue  # 已到达目标，不再给通信奖励
+                sinr_val = sinr_per_agent[agent_id]
+                if np.isnan(sinr_val) or sinr_val <= 0:
+                    comm_reward = -self.reward_ber_weight
+                else:
+                    sinr_db = 10.0 * np.log10(sinr_val)
+                    sinr_db_clipped = np.clip(sinr_db, -20.0, 20.0)
+                    comm_reward = self.reward_ber_weight * sinr_db_clipped / 20.0
+                rewards[agent_id] += comm_reward
 
         # 如果只有一个agent，返回单个值（向后兼容）
         if self.num_agents == 1:

@@ -38,9 +38,7 @@ def train_madqn(env, madqn):
         logger.info("---------- Iteration %s/%s 开始 ----------", i + 1, madqn.iteration)
         pbar = tqdm(range(1, madqn.num_episodes + 1), desc=f"Iteration({i+1}) progress", unit="episode")
         for ep in pbar:
-            states, _ = env.reset()
-            if env.num_agents == 1:
-                states = [states]
+            states, _ = env.reset()  # 始终返回 list of tuples
 
             agent_returns = [0.0] * madqn.num_agents
             agent_arrived = [False] * madqn.num_agents

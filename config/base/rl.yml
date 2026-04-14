@@ -1,0 +1,63 @@
+# 强化学习算法超参数
+description: "DQN / MADQN 训练与测试参数"
+
+algo:
+  value: "madqn"
+  description: "算法选择：dqn 或 madqn"
+
+lr:
+  value: 1.0e-3
+  description: "学习率"
+
+gamma:
+  value: 0.99
+  description: "折扣因子"
+
+epsilon:
+  value: 0.5
+  description: "初始探索率"
+
+epsilon_min:
+  value: 0.1
+  description: "最小探索率"
+
+epsilon_decay:
+  value: 0.95
+  description: "探索率衰减系数"
+
+iteration:
+  value: 5
+  description: "训练迭代轮数"
+
+num_episodes:
+  value: 50
+  description: "每轮迭代的 episode 数"
+
+episode_length:
+  value: 5000
+  description: "每个 episode 的最大步数"
+
+batch_size:
+  value: 64
+  description: "批大小"
+
+mini_batch_size:
+  value: 64
+  description: "小批量采样大小"
+
+hidden_dim:
+  value: 128
+  description: "Q-网络隐藏层维度"
+
+update_freq:
+  value: 10
+  description: "目标网络更新频率（每 N 步）"
+
+# ---------- 测试参数 ----------
+test_max_steps:
+  value: 200
+  description: "测试时最大步数"
+
+model_dir:
+  value: "models"
+  description: "模型保存/加载目录（相对项目根目录）"

@@ -135,6 +135,23 @@ def channel_vector(chn_paras, thetas=None):
     chn_vcts = beta[:, np.newaxis] * alpha_transmit
     return chn_vcts
 
+def compute_arrival_angles(positions, antenna_pos):
+    """
+    根据 agent 物理位置与天线位置计算各用户的到达角（AoA）。
+    假设 ULA 沿 x 轴排列，broadside 方向为 y 轴正方向。
+    θ = arctan2(dx, dy)，即信号方向与 broadside 的夹角。
+    :param positions: (n, 2) 数组，agent 物理坐标 (x, y)（米）
+    :param antenna_pos: (2,) 数组，天线物理坐标 (x, y)（米）
+    :return: (n,) 数组，各用户到达角（弧度），范围 [-π, π]
+    """
+    positions = np.atleast_2d(np.asarray(positions, dtype=np.float64))
+    antenna_pos = np.asarray(antenna_pos, dtype=np.float64).ravel()
+    dx = positions[:, 0] - antenna_pos[0]
+    dy = positions[:, 1] - antenna_pos[1]
+    thetas = np.arctan2(dx, dy)
+    return thetas
+
+
 def channel_group(chn_vcts):
     """
     按信道向量范数分为两组：大的一组（范数大）、小的一组（范数小）。

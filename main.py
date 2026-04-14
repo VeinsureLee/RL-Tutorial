@@ -1,68 +1,11 @@
 """
 主入口：选择模型（dqn / madqn）进行训练或测试。
-用法: python main.py --model dqn --mode train
+用法: python main.py --model madqn --mode train
       python main.py --model madqn --mode test
+      python main.py --model dqn --mode test --max_steps 300
 """
-import sys
-import os
 import argparse
-import time
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import torch
-from env.env import Env
-from rl_algorithms.structure.dqn import DQN
-from rl_algorithms.structure.madqn import MADQN
-from rl_algorithms.train.train_dqn import train_dqn
-from rl_algorithms.train.train_madqn import train_madqn
-
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(_ROOT, "models")
-
-
-def _get_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def _create_env():
-    return Env()
-
-
-def _create_and_train_dqn(env, device):
-    dqn = DQN(env, agent_id=0, lr=1e-3, gamma=0.99, iteration=5,
-              epsilon=0.8, epsilon_decay=0.9, epsilon_min=0.1,
-              num_episodes=50, episode_length=35000, mini_batch_size=64,
-              update_freq=10, device=device)
-    dqn, _ = train_dqn(env, dqn)
-    path = os.path.join(MODEL_DIR, "dqn_model.pth")
-    dqn.save(path)
-    return dqn
-
-
-def _create_and_train_madqn(env, device):
-    madqn = MADQN(env, lr=1e-3, gamma=0.99, iteration=5,
-                  epsilon=0.5, epsilon_decay=0.95, epsilon_min=0.1,
-                  num_episodes=50, episode_length=5000, mini_batch_size=64,
-                  update_freq=10, device=device)
-    madqn, *_ = train_madqn(env, madqn)
-    path = os.path.join(MODEL_DIR, "madqn_model.pth")
-    madqn.save(path)
-    return madqn
-
-
-def _load_and_test_dqn(env, device, model_path, max_steps=200, verbose=True):
-    dqn = DQN(env, agent_id=0, device=device)
-    dqn.load(model_path)
-    from rl_algorithms.test.test_dqn import run_with_agent
-    return run_with_agent(env, dqn, max_steps=max_steps, debug=verbose)
-
-
-def _load_and_test_madqn(env, device, model_path, max_steps=200, verbose=True):
-    madqn = MADQN(env, device=device)
-    madqn.load(model_path)
-    from rl_algorithms.test.test_madqn import run_with_agent
-    return run_with_agent(env, madqn, max_steps=max_steps, debug=verbose)
+from rl_algorithms import train, test
 
 
 def main():
@@ -70,43 +13,19 @@ def main():
     parser.add_argument("--model", choices=["dqn", "madqn"], default="madqn", help="模型: dqn 或 madqn")
     parser.add_argument("--mode", choices=["train", "test"], default="test", help="模式: train 或 test")
     parser.add_argument("--model_path", type=str, default=None, help="测试时模型路径，默认 models/<model>_model.pth")
-    parser.add_argument("--max_steps", type=int, default=200, help="测试时最大步数")
-    parser.add_argument("--quiet", action="store_true", help="测试时减少输出")
+    parser.add_argument("--max_steps", type=int, default=None, help="测试时最大步数（默认从 rl.yml 读取）")
     args = parser.parse_args()
 
-    device = _get_device()
-    env = _create_env()
-
     if args.mode == "train":
-        print(f"训练 {args.model.upper()} ...")
-        if args.model == "dqn":
-            _create_and_train_dqn(env, device)
-        else:
-            _create_and_train_madqn(env, device)
-        print("训练完成。")
-        return
-
-    # test：运行并显示结果，不保存文件
-    path = args.model_path or os.path.join(MODEL_DIR, f"{args.model}_model.pth")
-    if not os.path.isfile(path):
-        print(f"未找到模型: {path}，请先训练或指定 --model_path")
-        sys.exit(1)
-    print(f"测试 {args.model.upper()}，加载: {path}")
-    start_time = time.time()
-    ok = _load_and_test_dqn(env, device, path, args.max_steps, not args.quiet) if args.model == "dqn" \
-         else _load_and_test_madqn(env, device, path, args.max_steps, not args.quiet)
-    elapsed = time.time() - start_time
-    print(f"运行时间: {elapsed:.2f} 秒")
-    print("测试通过。" if ok else "测试未在步数内完成。")
-
-    # 使用 env 自带的 render 方式展示运行结果（不保存）
-    print("\n展示运行结果...")
-    try:
-        env.render(mode="human")
-        env.render_animation(interval=200, save_path=None)
-    except Exception as e:
-        print(f"展示出错: {e}")
-    print("展示完成。")
+        result = train(algo=args.model)
+        print(f"训练完成。模型保存至: {result.get('model_path', '未保存')}")
+    else:
+        result = test(algo=args.model, model_path=args.model_path,
+                      max_steps=args.max_steps, render=True, save_results=True)
+        if result.get("last_frame_path"):
+            print(f"Last frame: {result['last_frame_path']}")
+        if result.get("gif_path"):
+            print(f"GIF: {result['gif_path']}")
 
 
 if __name__ == "__main__":

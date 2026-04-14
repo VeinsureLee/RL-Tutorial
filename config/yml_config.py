@@ -63,6 +63,7 @@ def get_channel_config() -> _ChannelArgs:
         "rho_min": float(_get_yml_value(_channel_yml, "rho_min", 0.01)),
         "P_max": float(_get_yml_value(_channel_yml, "P_max", 100.0)),
         "P_min": float(_get_yml_value(_channel_yml, "P_min", 5.0)),
+        "channel_bandwidth": float(_get_yml_value(_channel_yml, "channel_bandwidth", 1.0e7)),
     })
 
 
@@ -165,6 +166,7 @@ def get_env_config() -> dict:
         "reward_forbidden": float(_get_yml_value(_env_yml, "reward_forbidden", -5)),
         "reward_step": float(_get_yml_value(_env_yml, "reward_step", -1)),
         "reward_closer_to_target": float(_get_yml_value(_env_yml, "reward_closer_to_target", 1)),
+        "reward_ber_weight": float(_get_yml_value(_env_yml, "reward_ber_weight", 1.0)),
         "los_nlos_grid": scenario["los_nlos_grid"],
         "map_config_map_size": tuple(int(x) for x in map_size),
         "antenna_position": antenna_position,
@@ -245,6 +247,34 @@ def get_base_map_and_seed():
         "square_size_range": tuple(_get_yml_value(_map_yml, "square_size_range", [3, 5])),
         "random_seed": int(_get_yml_value(_seed_yml, "random_seed", 42)),
     }
+
+
+# ---------------------------------------------------------------------------
+# RL 配置（rl.yml）
+# ---------------------------------------------------------------------------
+
+_RL_DEFAULTS = dict(
+    algo="madqn", lr=1e-3, gamma=0.99,
+    epsilon=0.5, epsilon_min=0.1, epsilon_decay=0.95,
+    iteration=5, num_episodes=50, episode_length=5000,
+    batch_size=64, mini_batch_size=64, hidden_dim=128, update_freq=10,
+    test_max_steps=200, model_dir="models",
+)
+
+
+def get_rl_config(**overrides) -> dict:
+    """
+    从 config/base/rl.yml 加载 RL 超参数，再用 overrides 覆盖。
+    :param overrides: 调用方传入的参数，优先级最高
+    :return: dict，包含所有 RL 超参数
+    """
+    _rl_yml = _load_base_yml("rl")
+    cfg = {}
+    for k, default in _RL_DEFAULTS.items():
+        v = _get_yml_value(_rl_yml, k, default)
+        cfg[k] = type(default)(v) if v is not None else default
+    cfg.update({k: v for k, v in overrides.items() if v is not None})
+    return cfg
 
 
 # ---------------------------------------------------------------------------
