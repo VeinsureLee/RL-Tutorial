@@ -175,7 +175,7 @@ def get_env_config() -> dict:
         "reward_closer": float(_get_yml_value(_env_yml, "reward_closer", -0.8)),
         "reward_farther": float(_get_yml_value(_env_yml, "reward_farther", 0.1)),
         "reward_same": float(_get_yml_value(_env_yml, "reward_same", 0.0)),
-        "omega": float(_get_yml_value(_env_yml, "omega", 0.004)),
+        "omega": float(_get_yml_value(_env_yml, "omega", 1.0)),
         "los_nlos_grid": scenario["los_nlos_grid"],
         "antenna_position": antenna_position,
         # 高度参数
@@ -277,8 +277,8 @@ def get_base_map_and_seed():
 
 _RL_DEFAULTS = dict(
     algo="madqn", lr=1e-4, gamma=0.9,
-    epsilon=0.1, epsilon_min=0.1, epsilon_decay=1.0,
-    num_episodes=200, episode_length=5000,
+    epsilon=0.5, epsilon_min=0.01, epsilon_decay=0.99,
+    num_iterations=5, num_episodes=50, episode_length=5000,
     batch_size=128, mini_batch_size=128, hidden_dim=128, update_freq=100,
     replay_buffer_size=50000,
     test_max_steps=500, model_dir="models",

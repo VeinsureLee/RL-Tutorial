@@ -13,20 +13,24 @@ gamma:
   description: "折扣因子（论文 0.9）"
 
 epsilon:
-  value: 0.1
-  description: "探索率（论文 0.1）"
+  value: 0.5
+  description: "初始探索率（从 0.5 衰减到 epsilon_min）"
 
 epsilon_min:
-  value: 0.1
+  value: 0.01
   description: "最小探索率"
 
 epsilon_decay:
-  value: 1.0
-  description: "探索率衰减系数（论文用固定 epsilon，设为 1.0 即不衰减）"
+  value: 0.99
+  description: "探索率衰减系数（每 episode 乘以此值）"
+
+num_iterations:
+  value: 5
+  description: "外层迭代数（每轮重置 epsilon，避免局部最优）"
 
 num_episodes:
-  value: 200
-  description: "训练 episode 数（论文 200 轮）"
+  value: 50
+  description: "每个 iteration 内的 episode 数"
 
 episode_length:
   value: 5000

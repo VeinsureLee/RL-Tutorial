@@ -52,6 +52,7 @@ def train(algo=None, env=None, device=None, save_model=True, plot=True, **kwargs
         replay_buffer_size=cfg["replay_buffer_size"], device=device,
     )
     train_kwargs = dict(
+        num_iterations=cfg["num_iterations"],
         num_episodes=cfg["num_episodes"],
         episode_length=cfg["episode_length"],
         batch_size=cfg["batch_size"],

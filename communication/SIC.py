@@ -89,16 +89,26 @@ def compute_ber(sinr, N, D):
     return ber
 
 
-def ber_to_reward(ber):
+def ber_to_reward(ber, reward_min=-0.5, reward_max=0.5):
     """
-    BER 转奖励（论文式 3-2）: R_rate = -log10(epsilon)。
-    BER 越小，奖励越大（正值）。
+    BER 转奖励（论文式 3-2 改进）: R_rate = -log10(epsilon)，归一化并截断到 [reward_min, reward_max]。
+
+    原始 -log10(BER) 范围极大（BER=1e-20→20, BER=0.5→0.3），
+    为平衡导航与通信奖励，先归一化到 [0,1] 再映射到 [reward_min, reward_max]。
+    归一化基准：BER=0.5 (最差,reward_min) ~ BER=1e-10 (极好,reward_max)。
 
     Args:
         ber: 误码率 array
+        reward_min: 最小奖励（通信质量差时）
+        reward_max: 最大奖励（通信质量好时）
 
     Returns:
-        reward: -log10(ber)
+        reward: 截断到 [reward_min, reward_max] 的奖励
     """
     ber = np.clip(ber, 1e-20, 1.0)
-    return -np.log10(ber)
+    raw = -np.log10(ber)  # BER=0.5→0.3, BER=1e-3→3, BER=1e-10→10
+    # 归一化到 [0,1]：以 -log10(0.5)≈0.3 为下界，-log10(1e-10)=10 为上界
+    normalized = (raw - 0.3) / (10.0 - 0.3)
+    normalized = np.clip(normalized, 0.0, 1.0)
+    # 映射到 [reward_min, reward_max]
+    return reward_min + normalized * (reward_max - reward_min)

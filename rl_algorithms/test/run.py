@@ -123,33 +123,56 @@ def test(algo=None, env=None, model=None, model_path=None,
     )
 
     if save_results:
+        import matplotlib.pyplot as plt
+
         gif_dir = os.path.join(_ROOT, "results", "gif")
         png_dir = os.path.join(_ROOT, "results", "png")
         os.makedirs(gif_dir, exist_ok=True)
         os.makedirs(png_dir, exist_ok=True)
 
         prefix = f"{algo}_{env.num_agents}agents"
-        gif_path = os.path.join(gif_dir, f"{prefix}_test.gif")
 
+        # --- 导航 GIF ---
+        nav_gif = os.path.join(gif_dir, f"{prefix}_nav.gif")
         try:
-            env.save_gif(gif_path, frames_data, fps=5)
-            print(f"GIF 已保存: {gif_path}")
-            result["gif_path"] = gif_path
+            env.save_nav_gif(nav_gif, frames_data, fps=5)
+            print(f"导航 GIF 已保存: {nav_gif}")
+            result["nav_gif"] = nav_gif
         except Exception as e:
-            print(f"GIF 保存出错: {e}")
+            print(f"导航 GIF 保存出错: {e}")
 
-        # 保存最终帧
+        # --- 信号 GIF ---
+        sig_gif = os.path.join(gif_dir, f"{prefix}_signal.gif")
         try:
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots(1, 1, figsize=(12, 6))
-            env.render_frame(ax)
-            png_path = os.path.join(png_dir, f"{prefix}_test.png")
-            fig.savefig(png_path, dpi=100, bbox_inches='tight')
+            env.save_signal_gif(sig_gif, frames_data, fps=5)
+            print(f"信号 GIF 已保存: {sig_gif}")
+            result["signal_gif"] = sig_gif
+        except Exception as e:
+            print(f"信号 GIF 保存出错: {e}")
+
+        # --- 导航地图 PNG（白色背景）---
+        try:
+            nav_path = os.path.join(png_dir, f"{prefix}_nav.png")
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+            env.render_nav_frame(ax)
+            fig.savefig(nav_path, dpi=150, bbox_inches='tight')
             plt.close(fig)
-            print(f"PNG 已保存: {png_path}")
-            result["png_path"] = png_path
+            print(f"导航图已保存: {nav_path}")
+            result["nav_path"] = nav_path
         except Exception as e:
-            print(f"PNG 保存出错: {e}")
+            print(f"导航图保存出错: {e}")
+
+        # --- 通信质量地图 PNG（热力图背景）---
+        try:
+            sig_path = os.path.join(png_dir, f"{prefix}_signal.png")
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+            env.render_signal_frame(ax)
+            fig.savefig(sig_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            print(f"信号图已保存: {sig_path}")
+            result["signal_path"] = sig_path
+        except Exception as e:
+            print(f"信号图保存出错: {e}")
 
     return result
 

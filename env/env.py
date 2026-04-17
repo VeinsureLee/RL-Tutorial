@@ -277,91 +277,186 @@ class MultiRobotEnv:
         """所有 agent 是否都到达目标。"""
         return bool(np.all(self.done_flags))
 
-    def render_frame(self, ax=None):
-        """渲染当前帧到 matplotlib axes，用于 GIF 生成。"""
-        if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+    # ------------------------------------------------------------------
+    # 可视化常量
+    # ------------------------------------------------------------------
+    AGENT_COLORS = ["blue", "orange", "purple", "brown", "pink", "gray", "olive", "cyan"]
 
-        ax.clear()
+    # ------------------------------------------------------------------
+    # 内部绘图辅助
+    # ------------------------------------------------------------------
+    def _draw_obstacles(self, ax):
+        """在 ax 上画黑色障碍物块。"""
+        for (r, c) in self.forbidden_set:
+            ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color='black'))
+
+    def _draw_agents(self, ax, positions, done_flags, trajectories):
+        """在 ax 上画起点(圆)、终点(星)、轨迹线、当前位置(方块)。"""
+        colors = self.AGENT_COLORS
+        for i in range(self.num_agents):
+            c = colors[i % len(colors)]
+            # 起点
+            sr, sc = self.start_states[i]
+            ax.scatter([sc], [sr], c=c, marker='o', s=100, edgecolors='black',
+                       linewidths=1, zorder=5)
+            # 终点
+            tr, tc = self.target_states[i]
+            ax.scatter([tc], [tr], c=c, marker='*', s=200, edgecolors='black',
+                       linewidths=1, zorder=5)
+            # 轨迹
+            traj = trajectories[i] if trajectories is not None else self.trajectories[i]
+            if len(traj) > 1:
+                arr = np.array(traj)
+                ax.plot(arr[:, 1], arr[:, 0], '-', color=c, linewidth=2, alpha=0.6, zorder=3)
+            # 当前位置
+            pos = positions[i] if positions is not None else self.positions[i]
+            pr, pc = pos
+            done = done_flags[i] if done_flags is not None else self.done_flags[i]
+            marker = '*' if done else 's'
+            ax.scatter([pc], [pr], c=c, marker=marker, s=80, edgecolors='black',
+                       linewidths=1, zorder=6)
+
+    def _setup_ax(self, ax):
+        """设置 ax 基本属性。"""
         ax.set_xlim(-0.5, self.cols - 0.5)
         ax.set_ylim(-0.5, self.rows - 0.5)
         ax.set_aspect('equal')
         ax.invert_yaxis()
 
-        # 禁区
+    # ------------------------------------------------------------------
+    # 导航地图（白色背景 + 黑色障碍物）
+    # ------------------------------------------------------------------
+    def render_nav_frame(self, ax, positions=None, done_flags=None, trajectories=None):
+        """白色背景导航地图：黑色障碍物 + 起点/终点/轨迹。"""
+        ax.clear()
+        self._setup_ax(ax)
+        ax.set_facecolor('white')
+        self._draw_obstacles(ax)
+        self._draw_agents(ax, positions, done_flags, trajectories)
+        ax.set_title("Navigation Map")
+
+    # ------------------------------------------------------------------
+    # 通信质量地图（路径损耗热力图背景 + 黑色障碍物）
+    # ------------------------------------------------------------------
+    def _get_signal_display(self):
+        """计算信号质量显示矩阵和统一的 vmin/vmax，供 PNG 和 GIF 共用。"""
+        pl = self.radio_map.path_loss.copy()
+        display = -pl
+        valid = display[np.isfinite(display)]
+        vmin_val = float(np.min(valid)) if len(valid) > 0 else -100.0
         for (r, c) in self.forbidden_set:
-            ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color='gray', alpha=0.5))
+            if 0 <= r < self.rows and 0 <= c < self.cols:
+                display[r, c] = vmin_val - 20
+        sig_vmin = float(np.percentile(valid, 1)) if len(valid) > 0 else -100.0
+        sig_vmax = float(np.percentile(valid, 99)) if len(valid) > 0 else -40.0
+        return display, sig_vmin, sig_vmax
 
-        # AP
-        ap = self.radio_map.ap_grid
-        ax.plot(ap[1], ap[0], 'r^', markersize=10, label='AP')
+    def _draw_signal_bg(self, ax, display, sig_vmin, sig_vmax):
+        """在 ax 上画信号质量热力图背景。"""
+        ax.imshow(display, cmap='turbo', origin='upper',
+                  extent=[-0.5, self.cols - 0.5, self.rows - 0.5, -0.5],
+                  aspect='equal', interpolation='nearest',
+                  vmin=sig_vmin, vmax=sig_vmax)
 
-        # Agent 轨迹和当前位置
-        colors = plt.cm.tab10(np.linspace(0, 1, self.num_agents))
-        for i in range(self.num_agents):
-            traj = self.trajectories[i]
-            if len(traj) > 1:
-                traj_arr = np.array(traj)
-                ax.plot(traj_arr[:, 1], traj_arr[:, 0], '-', color=colors[i], alpha=0.5, linewidth=1)
+    def render_signal_frame(self, ax, positions=None, done_flags=None, trajectories=None,
+                            display=None, sig_vmin=None, sig_vmax=None, colorbar=True):
+        """通信质量背景地图：路径损耗热力图 + 黑色障碍物 + 起点/终点/轨迹。"""
+        ax.clear()
+        self._setup_ax(ax)
+        if display is None:
+            display, sig_vmin, sig_vmax = self._get_signal_display()
+        im = ax.imshow(display, cmap='turbo', origin='upper',
+                       extent=[-0.5, self.cols - 0.5, self.rows - 0.5, -0.5],
+                       aspect='equal', interpolation='nearest',
+                       vmin=sig_vmin, vmax=sig_vmax)
+        if colorbar:
+            ax.figure.colorbar(im, ax=ax, label='Signal Strength (dB)', shrink=0.8)
+        self._draw_obstacles(ax)
+        self._draw_agents(ax, positions, done_flags, trajectories)
+        ax.set_title("Signal Quality Map")
 
-            # 当前位置
-            r, c = self.positions[i]
-            marker = '*' if self.done_flags[i] else 'o'
-            ax.plot(c, r, marker, color=colors[i], markersize=8, label=f'Agent {i}')
-
-            # 目标
-            tr, tc = self.target_states[i]
-            ax.plot(tc, tr, 'x', color=colors[i], markersize=8)
-
-        ax.legend(loc='upper right', fontsize=6)
+    # ------------------------------------------------------------------
+    # 兼容旧接口
+    # ------------------------------------------------------------------
+    def render_frame(self, ax=None):
+        """渲染当前帧（导航地图）。"""
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        self.render_nav_frame(ax)
         return ax
 
-    def save_gif(self, path, frames_data, fps=5):
-        """
-        从帧数据列表生成 GIF。
+    # ------------------------------------------------------------------
+    # 双视图：导航 + 通信质量
+    # ------------------------------------------------------------------
+    def render_dual(self, save_path=None):
+        """渲染双视图并保存 PNG。"""
+        fig, (ax_nav, ax_sig) = plt.subplots(1, 2, figsize=(20, 8))
+        self.render_nav_frame(ax_nav)
+        self.render_signal_frame(ax_sig)
+        # 图例
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor=self.AGENT_COLORS[i % len(self.AGENT_COLORS)],
+                  edgecolor='black', label=f'Agent {i}')
+            for i in range(self.num_agents)
+        ]
+        fig.legend(handles=legend_elements, loc='lower center',
+                   ncol=min(self.num_agents, 8), frameon=True)
+        plt.tight_layout(rect=[0, 0.04, 1, 1])
+        if save_path:
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        return fig
 
-        Args:
-            path: 保存路径
-            frames_data: list of (positions, done_flags, trajectories) tuples
-            fps: 帧率
-        """
+    # ------------------------------------------------------------------
+    # GIF 保存（双视图）
+    # ------------------------------------------------------------------
+    def _sample_frame_indices(self, total, max_frames=100):
+        """均匀抽帧，返回帧索引列表。"""
+        if total > max_frames:
+            indices = [0] + [int(round(i * (total - 1) / (max_frames - 1)))
+                             for i in range(1, max_frames)]
+            return sorted(set(indices))
+        return list(range(total))
+
+    def _render_gif_frames(self, fig, ax, frames_data, indices, render_fn, **render_kwargs):
+        """通用 GIF 帧渲染，返回 PIL Image 列表。"""
+        total = len(frames_data)
         images = []
-        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
-
-        for positions, done_flags, trajectories in frames_data:
-            ax.clear()
-            ax.set_xlim(-0.5, self.cols - 0.5)
-            ax.set_ylim(-0.5, self.rows - 0.5)
-            ax.set_aspect('equal')
-            ax.invert_yaxis()
-
-            for (r, c) in self.forbidden_set:
-                ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color='gray', alpha=0.5))
-
-            ap = self.radio_map.ap_grid
-            ax.plot(ap[1], ap[0], 'r^', markersize=10)
-
-            colors = plt.cm.tab10(np.linspace(0, 1, self.num_agents))
-            for i in range(self.num_agents):
-                traj = trajectories[i]
-                if len(traj) > 1:
-                    traj_arr = np.array(traj)
-                    ax.plot(traj_arr[:, 1], traj_arr[:, 0], '-', color=colors[i], alpha=0.5)
-                r, c = positions[i]
-                marker = '*' if done_flags[i] else 'o'
-                ax.plot(c, r, marker, color=colors[i], markersize=8)
-                tr, tc = self.target_states[i]
-                ax.plot(tc, tr, 'x', color=colors[i], markersize=8)
-
+        for idx in indices:
+            positions, done_flags, trajectories = frames_data[idx]
+            render_fn(ax, positions=positions, done_flags=done_flags,
+                      trajectories=trajectories, **render_kwargs)
+            ax.set_title(ax.get_title().split("(")[0] + f"(Step {idx}/{total - 1})")
             buf = BytesIO()
             fig.savefig(buf, format='png', dpi=80, bbox_inches='tight')
             buf.seek(0)
             images.append(Image.open(buf).copy())
             buf.close()
+        return images
 
-        plt.close(fig)
-
+    def _save_images_as_gif(self, images, path, fps):
+        """将 PIL Image 列表保存为 GIF。"""
         if images:
             duration = int(1000 / fps)
             images[0].save(path, save_all=True, append_images=images[1:],
-                          duration=duration, loop=0)
+                           duration=duration, loop=0)
+
+    def save_nav_gif(self, path, frames_data, fps=5, max_frames=100):
+        """保存导航地图 GIF（白色背景）。"""
+        indices = self._sample_frame_indices(len(frames_data), max_frames)
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        images = self._render_gif_frames(fig, ax, frames_data, indices, self.render_nav_frame)
+        plt.close(fig)
+        self._save_images_as_gif(images, path, fps)
+
+    def save_signal_gif(self, path, frames_data, fps=5, max_frames=100):
+        """保存通信质量地图 GIF（热力图背景）。"""
+        indices = self._sample_frame_indices(len(frames_data), max_frames)
+        display, sig_vmin, sig_vmax = self._get_signal_display()
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        images = self._render_gif_frames(
+            fig, ax, frames_data, indices, self.render_signal_frame,
+            display=display, sig_vmin=sig_vmin, sig_vmax=sig_vmax, colorbar=False)
+        plt.close(fig)
+        self._save_images_as_gif(images, path, fps)
