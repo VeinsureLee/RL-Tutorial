@@ -115,21 +115,18 @@ class MultiRobotEnv:
                         for dc in range(int(h)):
                             forbidden.add((int(r + dr), int(c + dc)))
                 elif len(area) == 2:
-                    # [(r1,c1), (r2,c2)] 格式 或 (pos, size) 格式
                     first, second = area
-                    if isinstance(first, (list, tuple)):
+                    if isinstance(first, (list, tuple)) and isinstance(second, (list, tuple)):
+                        # [(r1,c1), (r2,c2)] 范围格式
                         (r1, c1), (r2, c2) = first, second
                         for r in range(int(r1), int(r2)):
                             for c in range(int(c1), int(c2)):
                                 forbidden.add((r, c))
-                    else:
-                        # (pos, size) - old format: pos=(x,y), size=scalar
-                        pos = first
-                        size = second
-                        if isinstance(pos, (list, tuple)) and len(pos) == 2:
-                            for dr in range(int(size)):
-                                for dc in range(int(size)):
-                                    forbidden.add((int(pos[0] + dr), int(pos[1] + dc)))
+                    elif isinstance(first, (list, tuple)) and len(first) == 2:
+                        # (pos, size) 格式: pos=(row,col), size=scalar
+                        for dr in range(int(second)):
+                            for dc in range(int(second)):
+                                forbidden.add((int(first[0] + dr), int(first[1] + dc)))
         return forbidden
 
     def pos_to_index(self, row, col):

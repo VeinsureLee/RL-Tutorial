@@ -170,11 +170,16 @@ class PrecomputedRadioMap:
         los = np.ones((rows, cols), dtype=bool)
 
         for area in self.forbidden_areas:
-            # area 格式: (row, col, width, height) 网格坐标
+            # area 格式: (row, col, width, height) 或 ((row, col), size)
             if len(area) == 4:
                 r, c, w, h = area
             elif len(area) == 2 and isinstance(area[0], (list, tuple, np.ndarray)):
-                (r, c), (w, h) = area[0], (area[1][0] - area[0][0], area[1][1] - area[0][1])
+                pos, size = area[0], area[1]
+                r, c = pos[0], pos[1]
+                if isinstance(size, (int, float, np.integer)):
+                    w, h = int(size), int(size)
+                else:
+                    w, h = size[0] - pos[0], size[1] - pos[1]
             else:
                 continue
 

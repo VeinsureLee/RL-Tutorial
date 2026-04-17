@@ -16,7 +16,6 @@ from rl_algorithms.structure import DQN, MADQN
 from rl_algorithms.train.run import train
 from rl_algorithms.test.run import test
 from rl_algorithms.train import train_dqn, train_madqn
-from rl_algorithms.test import render_dual, render_animation_dual
 from rl_algorithms.plot import plot_dqn, plot_madqn, FIG_DIR
 
 __all__ = [
@@ -28,8 +27,6 @@ __all__ = [
     "MADQN",
     "train_dqn",
     "train_madqn",
-    "render_dual",
-    "render_animation_dual",
     "plot_dqn",
     "plot_madqn",
     "FIG_DIR",

@@ -21,11 +21,11 @@ def main():
         print(f"训练完成。模型保存至: {result.get('model_path', '未保存')}")
     else:
         result = test(algo=args.model, model_path=args.model_path,
-                      max_steps=args.max_steps, render=True, save_results=True)
-        if result.get("last_frame_path"):
-            print(f"Last frame: {result['last_frame_path']}")
+                      max_steps=args.max_steps, save_results=True)
         if result.get("gif_path"):
             print(f"GIF: {result['gif_path']}")
+        if result.get("png_path"):
+            print(f"PNG: {result['png_path']}")
 
 
 if __name__ == "__main__":

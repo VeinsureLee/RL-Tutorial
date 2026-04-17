@@ -100,18 +100,22 @@ def compute_ber_rewards(
     for s_idx, w_idx in clusters:
         H_clusters.append(np.vstack([H[s_idx:s_idx+1], H[w_idx:w_idx+1]]))  # (2, N_t)
 
-    W = matrix_cal(H_clusters)  # list of (N_t, 1) precoding vectors
+    W = [matrix_cal(H_clusters, m) for m in range(M)]  # list of (N_t, N_m) precoding matrices
 
     # 5. 计算等效信道增益和 SINR
     ber_all = np.zeros(K)
     sinr_all = np.zeros(K)
 
     for m, (s_idx, w_idx) in enumerate(clusters):
-        w_m = W[m]  # (N_t, 1)
+        w_m = W[m]  # (N_t, 2) — col 0 for strong user, col 1 for weak user
+
+        # NOMA: 两个用户共享同一个预编码向量（取第一列归一化）
+        w_vec = w_m[:, 0:1]  # (N_t, 1)
+        w_vec = w_vec / (np.linalg.norm(w_vec) + 1e-12)
 
         # 等效信道增益 |h * w|^2
-        g_strong = np.abs(H[s_idx] @ w_m) ** 2
-        g_weak = np.abs(H[w_idx] @ w_m) ** 2
+        g_strong = float(np.abs(H[s_idx] @ w_vec) ** 2)
+        g_weak = float(np.abs(H[w_idx] @ w_vec) ** 2)
 
         # 根据 agent 的功率动作选择功率
         p_s_idx = min(power_actions[s_idx], len(strong_powers_table) - 1)
