@@ -1,119 +1,104 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+"""
+NOMA SIC 解码、二进制功率控制、SINR/BER 计算。
+对齐论文：功率作为动作空间的一部分，每簇两用户按强弱分配不同功率等级。
+"""
 import numpy as np
-from config.yml_config import _get_parser
-from communication.utils import *
 from scipy.special import erfc
-
-_parser = _get_parser().parse_args()
-noise_power_dbm = _parser.power_AWGN
-_noise_spectral_density = dbm2watt(noise_power_dbm)        # W/Hz
-_channel_bandwidth = getattr(_parser, 'channel_bandwidth', 1.0e7)  # Hz
-noise_power = _noise_spectral_density * _channel_bandwidth  # 总噪声功率 (W)
-channel_block_length = _parser.channel_block_length
-packet_size = _parser.packet_size
+from scipy.stats import norm
 
 
-def compute_sinr(h1, h2, w, P1, P2, verbose=False):
+def get_power_levels(P_max_per_cluster, num_levels):
     """
-    图二 式(2-12)(2-13)：NOMA 下强/弱用户 SINR。
-    强用户（SIC 后）：SINR_{m,1} = P_{m,1}|h_{m,1}^H w_m|^2 / σ^2；
-    弱用户（受强用户干扰）：SINR_{m,2} = P_{m,2}|h_{m,2}^H w_m|^2 / (P_{m,1}|h_{m,2}^H w_m|^2 + σ^2)。
-    :param h1: 强用户信道向量 (Nt,) 或 (1, Nt)
-    :param h2: 弱用户信道向量 (Nt,) 或 (1, Nt)
-    :param w: 预编码向量或矩阵 (Nt,) 或 (Nt, 1)；若为 (Nt, 2) 则取第一列作为公共波束
-    :param P1: 强用户功率 (W)
-    :param P2: 弱用户功率 (W)
-    :param verbose: 是否打印 SINR 计算过程
-    :return: (sinr_1, sinr_2) 标量
+    生成二进制功率控制的功率等级列表（论文 3.2 节）。
+
+    Args:
+        P_max_per_cluster: 每簇最大功率 (mW)
+        num_levels: 可用功率数 p
+
+    Returns:
+        strong_powers: 较强用户的功率等级列表，长度 p
+                       P_max/2^p, ..., P_max/2^{2p} (从大到小排列，但都较小)
+        weak_powers:   较弱用户的功率等级列表，长度 p
+                       P_max/2, ..., P_max/2^{p} (从大到小排列，都较大)
     """
-    # 使用真实噪声功率：power_AWGN=-143 dBm/Hz → 约 5e-18 W，下限仅防除零，不覆盖真实值
-    sigma = max(float(noise_power), 1e-25)
-    h1 = np.asarray(h1, dtype=np.complex128).ravel()
-    h2 = np.asarray(h2, dtype=np.complex128).ravel()
-    w = np.asarray(w, dtype=np.complex128)
-    if w.ndim == 2:
-        w = w[:, 0].ravel()
-    else:
-        w = w.ravel()
-    g1 = np.abs(np.dot(h1, w)) ** 2
-    g2 = np.abs(np.dot(h2, w)) ** 2
-    g1 = max(float(g1), 1e-20)
-    g2 = max(float(g2), 1e-20)
-    sinr_1 = P1 * g1 / sigma
-    sinr_2 = P2 * g2 / (P1 * g2 + sigma)
-    if verbose:
-        print("  [SINR 计算] σ² = {:.6e} W,  g1 = |h1^H w|² = {:.6e},  g2 = |h2^H w|² = {:.6e}".format(sigma, g1, g2))
-        print("  [SINR 计算] P1 = {:.6e} W,  P2 = {:.6e} W".format(P1, P2))
-        print("  [SINR 计算] SINR_1 = P1*g1/σ² = {:.6e} = {:.2f} dB".format(sinr_1, 10 * np.log10(max(sinr_1, 1e-20))))
-        print("  [SINR 计算] SINR_2 = P2*g2/(P1*g2+σ²) = {:.6e} = {:.2f} dB".format(sinr_2, 10 * np.log10(max(sinr_2, 1e-20))))
-    return float(sinr_1), float(sinr_2)
-
-def Q(xi):
-    """图二 式(2-15)：Q 函数 Q(ξ) = 0.5*erfc(ξ/sqrt(2))"""
-    return 0.5 * erfc(xi / np.sqrt(2))
-
-def V_func(sinr):
-    """图二 式(2-16)：信道色散 V = 1 - (1 + SINR)^(-2)"""
-    return 1 - (1 + sinr)**(-2)
-
-def epsilon(sinr):
-    """图二 式(2-14)：有限块长下的解码错误概率（误码率）ε = Q(ln2*sqrt(N/V)*log2(1+SINR) - D/N)"""
-    sinr = max(float(sinr), 1e-10)  # 避免 V=0 导致除零
-    N = channel_block_length
-    D = packet_size
-    V = V_func(sinr)
-    V = max(V, 1e-10)  # 避免 sqrt(N/V) 爆炸
-    return float(Q(np.log(2) * np.sqrt(N / V) * np.log2(1 + sinr) - D / N))
+    p = num_levels
+    # 较强机器人（信道好）分配较少功率
+    strong_powers = np.array([P_max_per_cluster / (2 ** i) for i in range(p, 2 * p)])
+    # 较弱机器人（信道差）分配较多功率
+    weak_powers = np.array([P_max_per_cluster / (2 ** i) for i in range(1, p + 1)])
+    return strong_powers, weak_powers
 
 
-def allocate_power(total_power, g_strong, g_weak, rho_min=None):
+def compute_sinr(H_precoded, powers_strong, powers_weak, noise_power):
     """
-    NOMA 功率分配：弱用户分配更多功率，且满足 SIC 约束 (P2-P1)*g_strong >= rho_min。
-    :param total_power: 总功率 (W)
-    :param g_strong: 强用户信道增益 |h_strong @ w|^2
-    :param g_weak: 弱用户信道增益 |h_weak @ w|^2
-    :param rho_min: 最小功率差要求，若为 None 则从 config 读取
-    :return: (P1, P2) 强用户、弱用户功率
+    计算 SIC 后的 SINR（论文式 2-12, 2-13）。
+
+    Args:
+        H_precoded: (M, 2) array, |h_{m,i} * w_m|^2，M 簇各 2 用户的等效信道增益
+        powers_strong: (M,) array, 每簇强用户分配功率 (mW)
+        powers_weak: (M,) array, 每簇弱用户分配功率 (mW)
+        noise_power: 噪声功率 (mW)
+
+    Returns:
+        sinr_strong: (M,) 强用户 SINR (SIC 后无簇内干扰)
+        sinr_weak: (M,) 弱用户 SINR (含簇内干扰)
     """
-    if rho_min is None:
-        rho_min = _parser.rho_min
-    # 弱用户分配更多：P2 > P1，且 (P2 - P1) * g_strong >= rho_min
-    # P1 + P2 = total_power => P2 = total_power - P1
-    # (total_power - 2*P1) * g_strong >= rho_min => P1 <= (total_power*g_strong - rho_min) / (2*g_strong)
-    g_strong = max(g_strong, 1e-12)
-    p1_max = (total_power * g_strong - rho_min) / (2 * g_strong) if g_strong > 0 else total_power / 2
-    p1_max = min(p1_max, total_power * 0.5)  # P1 不超过一半
-    p1_max = max(0.0, min(p1_max, total_power))
-    # 取 P1 为较小值，使弱用户获得更多功率
-    P1 = min(total_power * 0.25, p1_max)
-    P1 = max(1e-12, P1)
-    P2 = total_power - P1
-    return float(P1), float(P2)
+    g_strong = H_precoded[:, 0]  # |h_{m,1} w_m|^2
+    g_weak = H_precoded[:, 1]    # |h_{m,2} w_m|^2
+
+    # 强用户 SIC 后 (式 2-12)
+    sinr_strong = (powers_strong * g_strong) / noise_power
+
+    # 弱用户 (式 2-13)
+    sinr_weak = (powers_weak * g_weak) / (powers_strong * g_weak + noise_power)
+
+    return sinr_strong, sinr_weak
+
+
+def compute_ber(sinr, N, D):
+    """
+    有限块长下的解码错误概率（论文式 2-14 ~ 2-16）。
+
+    Args:
+        sinr: SINR 值 (线性，非 dB)
+        N: 信道块长度
+        D: 数据包大小 (bits)
+
+    Returns:
+        ber: 误码率 epsilon
+    """
+    sinr = np.maximum(sinr, 1e-10)  # 避免 log(0)
+
+    # 信道色散 V (式 2-16)
+    V = 1.0 - (1.0 + sinr) ** (-2)
+    V = np.maximum(V, 1e-10)
+
+    # 编码率
+    rate = D / N
+
+    # Q 函数参数 (式 2-14)
+    capacity = np.log2(1.0 + sinr)
+    xi = np.log(2) * np.sqrt(N / V) * (capacity - rate)
+
+    # Q 函数: Q(x) = 0.5 * erfc(x / sqrt(2))
+    ber = 0.5 * erfc(xi / np.sqrt(2))
+
+    # 裁剪到 [1e-20, 1.0]
+    ber = np.clip(ber, 1e-20, 1.0)
+
+    return ber
 
 
 def ber_to_reward(ber):
-    """误码率取对数取相反数作为 reward，即 -log(ber)。ber 过小时裁剪避免 -inf。"""
-    ber = np.clip(float(ber), 1e-10, 1.0)
-    return -np.log(ber)
-
-
-def get_noma_powers(P_max, p, P_min=None):
     """
-    分簇后功率分配：大组 p 个用户功率为 P_max/2^p, ..., P_max/2^(2p-1)；
-    小组 p 个用户功率为 P_max/2, ..., P_max/2^p。同一簇内大组用户为强用户、小组用户为弱用户。
-    :param P_max: 最大功率 (W)
-    :param p: 簇数（大组/小组各有 p 个用户）
-    :param P_min: 最小功率 (W)，None 则从 config 读取
-    :return: (large_powers, small_powers)，各为长度 p 的数组
+    BER 转奖励（论文式 3-2）: R_rate = -log10(epsilon)。
+    BER 越小，奖励越大（正值）。
+
+    Args:
+        ber: 误码率 array
+
+    Returns:
+        reward: -log10(ber)
     """
-    if P_min is None:
-        P_min = _parser.P_min
-    P_max = max(float(P_max), P_min)
-    large_powers = np.array([P_max / (2 ** (p + k)) for k in range(p)], dtype=np.float64)
-    small_powers = np.array([P_max / (2 ** (k + 1)) for k in range(p)], dtype=np.float64)
-    large_powers = np.clip(large_powers, P_min, P_max)
-    small_powers = np.clip(small_powers, P_min, P_max)
-    return large_powers, small_powers
+    ber = np.clip(ber, 1e-20, 1.0)
+    return -np.log10(ber)
