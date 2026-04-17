@@ -48,22 +48,28 @@ def get_channel_config() -> _ChannelArgs:
     _map_yml = _load_base_yml("map")
     ap = _get_yml_value(_channel_yml, "antenna_position", None)
     if ap is None:
-        ap = _get_yml_value(_map_yml, "antenna_position", [24, 12])
+        ap = _get_yml_value(_map_yml, "antenna_position", [60, 30])
     ap = tuple(ap) if isinstance(ap, list) else ap
+
+    power_awgn_dbm_hz = float(_get_yml_value(_channel_yml, "power_AWGN", -143.0))
+    bw = float(_get_yml_value(_channel_yml, "channel_bandwidth", 1.0e7))
+    # 噪声功率 (mW): N0(dBm/Hz) + 10*log10(BW) -> dBm -> mW
+    noise_dbm = power_awgn_dbm_hz + 10 * np.log10(bw)
+    noise_power_mw = 10 ** (noise_dbm / 10)  # dBm -> mW
+
     return _ChannelArgs({
         "carrier_frequency": float(_get_yml_value(_channel_yml, "carrier_frequency", 3.5)),
         "sigma_rayleigh": float(_get_yml_value(_channel_yml, "sigma_rayleigh", 1.2)),
         "number_of_antenna": int(_get_yml_value(_channel_yml, "number_of_antenna", 128)),
         "antenna_position": ap,
-        "power_AWGN": float(_get_yml_value(_channel_yml, "power_AWGN", -143.0)),
+        "power_AWGN": power_awgn_dbm_hz,
+        "channel_bandwidth": bw,
         "channel_block_length": int(_get_yml_value(_channel_yml, "channel_block_length", 256)),
         "packet_size": int(_get_yml_value(_channel_yml, "packet_size", 16)),
-        "number_of_robots": int(_get_yml_value(_channel_yml, "number_of_robots", 4)),
-        "total_power": float(_get_yml_value(_channel_yml, "total_power", 1.0)),
-        "rho_min": float(_get_yml_value(_channel_yml, "rho_min", 0.01)),
-        "P_max": float(_get_yml_value(_channel_yml, "P_max", 100.0)),
-        "P_min": float(_get_yml_value(_channel_yml, "P_min", 5.0)),
-        "channel_bandwidth": float(_get_yml_value(_channel_yml, "channel_bandwidth", 1.0e7)),
+        "P_sum": float(_get_yml_value(_channel_yml, "P_sum", 100.0)),
+        "P_min_diff": float(_get_yml_value(_channel_yml, "P_min_diff", 5.0)),
+        "num_power_levels": int(_get_yml_value(_channel_yml, "num_power_levels", 3)),
+        "noise_power_mw": noise_power_mw,
     })
 
 
@@ -143,33 +149,49 @@ def get_env_config() -> dict:
             "los_region, nlos_region, los_nlos_grid）。请先运行 config.generator.main 生成。"
         )
 
-    action_space_raw = _get_yml_value(
-        _env_yml, "action_space",
-        [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]],
+    action_directions_raw = _get_yml_value(
+        _env_yml, "action_directions",
+        [[0, 1], [1, 0], [0, -1], [-1, 0]],
     )
-    action_space = [tuple(a) for a in action_space_raw] if action_space_raw else [(0, 1), (1, 0), (0, -1), (-1, 0), (0, 0)]
+    action_directions = [tuple(a) for a in action_directions_raw] if action_directions_raw else [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
     antenna_position = _get_yml_value(_channel_yml, "antenna_position", None)
     if antenna_position is None:
-        antenna_position = _get_yml_value(_map_yml, "antenna_position", [24, 12])
+        antenna_position = _get_yml_value(_map_yml, "antenna_position", [60, 30])
     antenna_position = tuple(antenna_position) if isinstance(antenna_position, list) else antenna_position
+
+    _channel_cfg = get_channel_config()
+    _map_yml_heights = _load_base_yml("map")
 
     return {
         "map_size": map_size,
         "grid_size": float(_get_yml_value(_env_yml, "grid_size", 0.4)),
         "start_states": scenario["start_states"],
         "target_states": scenario["target_states"],
-        "target_state": scenario["target_states"],
         "forbidden_areas": scenario["forbidden_areas"],
-        "action_space": action_space,
-        "reward_target": float(_get_yml_value(_env_yml, "reward_target", 10)),
+        "action_directions": action_directions,
+        "reward_goal": float(_get_yml_value(_env_yml, "reward_goal", 10)),
         "reward_forbidden": float(_get_yml_value(_env_yml, "reward_forbidden", -5)),
-        "reward_step": float(_get_yml_value(_env_yml, "reward_step", -1)),
-        "reward_closer_to_target": float(_get_yml_value(_env_yml, "reward_closer_to_target", 1)),
-        "reward_ber_weight": float(_get_yml_value(_env_yml, "reward_ber_weight", 1.0)),
+        "reward_closer": float(_get_yml_value(_env_yml, "reward_closer", -0.8)),
+        "reward_farther": float(_get_yml_value(_env_yml, "reward_farther", 0.1)),
+        "reward_same": float(_get_yml_value(_env_yml, "reward_same", 0.0)),
+        "omega": float(_get_yml_value(_env_yml, "omega", 0.004)),
         "los_nlos_grid": scenario["los_nlos_grid"],
-        "map_config_map_size": tuple(int(x) for x in map_size),
         "antenna_position": antenna_position,
+        # 高度参数
+        "h_AP": float(_get_yml_value(_map_yml_heights, "h_AP", 2.0)),
+        "h_robot": float(_get_yml_value(_map_yml_heights, "h_robot", 1.5)),
+        "h_block": float(_get_yml_value(_map_yml_heights, "h_block", 3.0)),
+        # 通信参数
+        "n_antenna": _channel_cfg.number_of_antenna,
+        "carrier_freq_ghz": _channel_cfg.carrier_frequency,
+        "sigma_rayleigh": _channel_cfg.sigma_rayleigh,
+        "P_sum": _channel_cfg.P_sum,
+        "P_min_diff": _channel_cfg.P_min_diff,
+        "num_power_levels": _channel_cfg.num_power_levels,
+        "channel_block_length": _channel_cfg.channel_block_length,
+        "packet_size": _channel_cfg.packet_size,
+        "noise_power_mw": _channel_cfg.noise_power_mw,
     }
 
 
@@ -199,7 +221,7 @@ def get_map_and_scenario():
 
     _map_yml = _load_base_yml("map")
     _channel_yml = _load_base_yml("channel")
-    map_size = _get_yml_value(_map_yml, "map_size", [48, 24])
+    map_size = _get_yml_value(_map_yml, "map_size", [120, 60])
     map_size = tuple(map_size) if isinstance(map_size, list) else map_size
     map_size = np.array(map_size, dtype=np.float64)
 
@@ -221,7 +243,7 @@ def get_map_and_scenario():
 
     ap = _get_yml_value(_channel_yml, "antenna_position", None)
     if ap is None:
-        ap = _get_yml_value(_map_yml, "antenna_position", [24, 12])
+        ap = _get_yml_value(_map_yml, "antenna_position", [60, 30])
     antenna_position = tuple(ap) if isinstance(ap, list) else ap
 
     return map_size, scenario["forbidden_areas"], get_los_nlos, antenna_position, scenario
@@ -235,16 +257,16 @@ def get_base_map_and_seed():
     """从 config/base 读取 map 与 random_seed，供 generator 生成场景。返回 dict。"""
     _map_yml = _load_base_yml("map")
     _seed_yml = _load_base_yml("random_seed")
-    map_size = _get_yml_value(_map_yml, "map_size", [48, 24])
+    map_size = _get_yml_value(_map_yml, "map_size", [120, 60])
     map_size = tuple(map_size) if isinstance(map_size, list) else map_size
-    antenna_position = _get_yml_value(_map_yml, "antenna_position", [24, 12])
+    antenna_position = _get_yml_value(_map_yml, "antenna_position", [60, 30])
     antenna_position = tuple(antenna_position) if isinstance(antenna_position, list) else antenna_position
     return {
         "map_size": map_size,
         "antenna_position": antenna_position,
         "num_agents": int(_get_yml_value(_map_yml, "number_of_robots", 4)),
         "num_forbidden_squares": int(_get_yml_value(_map_yml, "num_forbidden_squares", 5)),
-        "square_size_range": tuple(_get_yml_value(_map_yml, "square_size_range", [3, 5])),
+        "square_size_range": tuple(_get_yml_value(_map_yml, "square_size_range", [7, 12])),
         "random_seed": int(_get_yml_value(_seed_yml, "random_seed", 42)),
     }
 
@@ -254,11 +276,12 @@ def get_base_map_and_seed():
 # ---------------------------------------------------------------------------
 
 _RL_DEFAULTS = dict(
-    algo="madqn", lr=1e-3, gamma=0.99,
-    epsilon=0.5, epsilon_min=0.1, epsilon_decay=0.95,
-    iteration=5, num_episodes=50, episode_length=5000,
-    batch_size=64, mini_batch_size=64, hidden_dim=128, update_freq=10,
-    test_max_steps=200, model_dir="models",
+    algo="madqn", lr=1e-4, gamma=0.9,
+    epsilon=0.1, epsilon_min=0.1, epsilon_decay=1.0,
+    num_episodes=200, episode_length=5000,
+    batch_size=128, mini_batch_size=128, hidden_dim=128, update_freq=100,
+    replay_buffer_size=50000,
+    test_max_steps=500, model_dir="models",
 )
 
 
@@ -284,7 +307,7 @@ def get_rl_config(**overrides) -> dict:
 def get_map_size():
     """地图尺寸 (rows, cols)。"""
     _map_yml = _load_base_yml("map")
-    ms = _get_yml_value(_map_yml, "map_size", [48, 24])
+    ms = _get_yml_value(_map_yml, "map_size", [120, 60])
     return tuple(ms) if isinstance(ms, list) else ms
 
 
