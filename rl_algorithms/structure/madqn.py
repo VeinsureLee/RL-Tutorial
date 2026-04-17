@@ -1,6 +1,6 @@
 """
-MADQN 模型模块：仅包含 MADQN 智能体类。
-训练与绘图见 train、plot。
+MADQN 模型模块：Independent DQN for multi-agent，对齐论文。
+动作空间 = n_dirs x n_powers 的复合动作。
 """
 import os
 import numpy as np
@@ -8,169 +8,141 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from rl_algorithms.utils.agent import Agent
 from rl_algorithms.net.qnet import Qnet
 from rl_algorithms.utils.replaybuffer import ReplayBuffer
-from rl_algorithms.utils.utils import state_to_idx_tensor
 
 
-class MADQN(Agent):
-    def __init__(self,
-                 env, lr=0.001, gamma=0.99,
-                 epsilon=1.0, epsilon_min=0.1, epsilon_decay=0.9,
-                 num_episodes=5, episode_length=35000,
-                 iteration=5, batch_size=64, mini_batch_size=64,
-                 hidden_dim=128, update_freq=10, device=torch.device("cpu")):
-        super().__init__(env=env,
-                         lr=lr, gamma=gamma,
-                         epsilon=epsilon, epsilon_min=epsilon_min,
-                         epsilon_decay=epsilon_decay,
-                         num_episodes=num_episodes, episode_length=episode_length)
-
+class MADQN:
+    def __init__(self, env, lr=1e-4, gamma=0.9,
+                 epsilon=0.1, epsilon_min=0.1, epsilon_decay=1.0,
+                 hidden_dim=128, update_freq=100,
+                 replay_buffer_size=50000, device=torch.device("cpu")):
+        self.env = env
         self.num_agents = env.num_agents
-        self.iteration = iteration
-
-        self.buffer = [ReplayBuffer(episode_length * num_episodes * env.num_agents)
-                       for _ in range(self.num_agents)]
-        self.batch_size = batch_size
-        self.mini_batch_size = mini_batch_size
-        self.hidden_dim = hidden_dim
-
-        state_num = env.state_num
-        self.q_nets = [Qnet(state_num=state_num, embedding_dim=64, hidden_dim=hidden_dim,
-                            action_dim=env.num_actions, x_dim=env.x_dim, y_dim=env.y_dim)
-                       for _ in range(self.num_agents)]
-        self.target_q_nets = [Qnet(state_num=state_num, embedding_dim=64, hidden_dim=hidden_dim,
-                                   action_dim=env.num_actions, x_dim=env.x_dim, y_dim=env.y_dim)
-                              for _ in range(self.num_agents)]
-
-        for i in range(self.num_agents):
-            self.target_q_nets[i].load_state_dict(self.q_nets[i].state_dict())
-            self.target_q_nets[i].eval()
-
-        self.optimizers = [optim.Adam(self.q_nets[i].parameters(), lr=lr)
-                           for i in range(self.num_agents)]
-        self.loss_fn = nn.MSELoss()
+        self.n_actions = env.n_actions
+        self.n_dirs = env.n_dirs
+        self.n_powers = env.n_powers
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
         self.device = device
-        for i in range(self.num_agents):
-            self.q_nets[i].to(self.device)
-            self.target_q_nets[i].to(self.device)
         self.update_freq = update_freq
 
-    def take_action(self, states, training=True):
-        # 输入约定：训练/测试脚本里 `states` 通常是长度=num_agents 的列表。
-        # 这里做一下兼容，避免外部调用传入单个状态导致索引错误。
-        if self.num_agents == 1 and not isinstance(states, (list, tuple)):
-            states = [states]
-        if self.num_agents == 1 and isinstance(states, (list, tuple)) and len(states) == 2 and not isinstance(states[0], (list, tuple, np.ndarray)):
-            # 形如 (x,y) 的单状态
-            states = [states]
+        state_num = env.n_states
+        self.map_cols = env.cols
 
-        # 1) 先为每个 agent 计算动作 Q 值排序
-        # 2) 再按 agent 顺序“贪心但带约束”地选动作：同一步内所有 agent 的 next_state 不允许重复
-        action_orders = []
-        for agent_id in range(self.num_agents):
-            target = self.env.target_states[agent_id]
-            state = states[agent_id]
-            state_idx_tensor = state_to_idx_tensor(state, self.env.y_dim, self.device)
-            target_idx_tensor = state_to_idx_tensor(target, self.env.y_dim, self.device)
+        self.q_nets = []
+        self.target_q_nets = []
+        self.optimizers = []
+        self.buffers = []
+
+        for _ in range(self.num_agents):
+            q = Qnet(state_num=state_num, embedding_dim=64, hidden_dim=hidden_dim,
+                     action_dim=self.n_actions, x_dim=env.rows, y_dim=env.cols).to(device)
+            t = Qnet(state_num=state_num, embedding_dim=64, hidden_dim=hidden_dim,
+                     action_dim=self.n_actions, x_dim=env.rows, y_dim=env.cols).to(device)
+            t.load_state_dict(q.state_dict())
+            t.eval()
+            self.q_nets.append(q)
+            self.target_q_nets.append(t)
+            self.optimizers.append(optim.Adam(q.parameters(), lr=lr))
+            self.buffers.append(ReplayBuffer(replay_buffer_size))
+
+        self.loss_fn = nn.MSELoss()
+        self.batch_size = 128  # will be overridden by training loop
+
+    def decode_action(self, action):
+        """compound action -> (dir_idx, power_idx)"""
+        return action // self.n_powers, action % self.n_powers
+
+    def take_action(self, states, training=True):
+        """
+        Epsilon-greedy with collision avoidance on direction component.
+
+        Args:
+            states: list of state_index (int)
+
+        Returns:
+            actions: list of compound action indices
+        """
+        actions = []
+        occupied = set()  # 已选定的下一步位置
+        directions = self.env.directions
+
+        for i in range(self.num_agents):
+            # 已到达目标的 agent
+            if self.env.done_flags is not None and self.env.done_flags[i]:
+                actions.append(0)
+                continue
+
+            target_idx = self.env.pos_to_index(*self.env.target_states[i])
+            state_tensor = torch.tensor([states[i]], dtype=torch.long, device=self.device)
+            target_tensor = torch.tensor([target_idx], dtype=torch.long, device=self.device)
 
             with torch.no_grad():
-                action_values = self.q_nets[agent_id](state_idx_tensor, target_idx_tensor)  # (1, num_actions)
-            q = action_values.squeeze(0).detach().cpu().numpy()
-            # 从大到小的动作索引
-            action_orders.append(list(np.argsort(-q)))
+                q_values = self.q_nets[i](state_tensor, target_tensor)
 
-        occupied_next_positions = set()
-        chosen_actions = [0] * self.num_agents
-
-        for agent_id in range(self.num_agents):
-            state = states[agent_id]
-            target_state = self.env.target_states[agent_id]
-
-            sorted_actions = action_orders[agent_id]
-            # 预计算每个动作的预测 next_state，便于选动作时快速检查重复
-            next_state_by_action = {}
-            allowed_actions = []
-
-            for action_idx in sorted_actions:
-                action = self.env.action_space[action_idx]
-                next_state, _reward = self.env._get_next_state_and_reward(state, action, target_state)
-                next_state = (int(next_state[0]), int(next_state[1]))
-                next_state_by_action[action_idx] = next_state
-                if next_state not in occupied_next_positions:
-                    allowed_actions.append(action_idx)
-
-            # epsilon-greedy：在“允许集合”中选择，避免 next_state 重合
-            if training:
-                if np.random.rand() < (1.0 - self.epsilon):
-                    # 偏向选择 Q 值最大的动作；若它导致重复，则选择允许集合中 Q 值最高的动作
-                    preferred = sorted_actions[0]
-                    if preferred not in allowed_actions and allowed_actions:
-                        preferred = allowed_actions[0]
-                    chosen_idx = preferred
-                else:
-                    # 探索：从允许集合里随机选；若允许集合为空，则退回到全动作随机
-                    if allowed_actions:
-                        chosen_idx = int(np.random.choice(allowed_actions))
-                    else:
-                        chosen_idx = int(np.random.choice(sorted_actions))
+            if training and np.random.random() < self.epsilon:
+                action = np.random.randint(self.n_actions)
             else:
-                # 推理：总是选择允许集合中 Q 值最高的动作（若无允许动作，则退回到全局最优）
-                if allowed_actions:
-                    chosen_idx = allowed_actions[0]
-                else:
-                    chosen_idx = sorted_actions[0]
+                action = q_values.argmax(dim=1).item()
 
-            chosen_actions[agent_id] = int(chosen_idx)
-            occupied_next_positions.add(next_state_by_action[chosen_idx])
+            # 检查方向是否导致冲突
+            dir_idx, power_idx = self.decode_action(action)
+            dr, dc = directions[dir_idx]
+            cur_r, cur_c = self.env.positions[i]
+            new_r = int(cur_r + dr)
+            new_c = int(cur_c + dc)
 
-        return chosen_actions
+            if (new_r, new_c) in occupied or (new_r, new_c) in self.env.forbidden_set:
+                # 按 Q 值排序尝试其他动作
+                sorted_actions = q_values.argsort(dim=1, descending=True).squeeze().tolist()
+                if isinstance(sorted_actions, int):
+                    sorted_actions = [sorted_actions]
+                for alt_action in sorted_actions:
+                    d_idx, _ = self.decode_action(alt_action)
+                    dr2, dc2 = directions[d_idx]
+                    nr2 = int(cur_r + dr2)
+                    nc2 = int(cur_c + dc2)
+                    if (nr2, nc2) not in occupied and (nr2, nc2) not in self.env.forbidden_set:
+                        action = alt_action
+                        new_r, new_c = nr2, nc2
+                        break
 
-    def update(self, agent_id):
-        if len(self.buffer[agent_id]) < self.mini_batch_size:
-            return None
+            occupied.add((new_r, new_c))
+            actions.append(action)
 
-        batch = self.buffer[agent_id].sample(self.mini_batch_size)
+        return actions
 
-        def normalize_state(s):
-            if isinstance(s, np.ndarray):
-                s = s.flatten()
-                if len(s) >= 2:
-                    return [int(s[0]), int(s[1])]
-            elif isinstance(s, (tuple, list)):
-                if len(s) >= 2:
-                    first_elem = s[0]
-                    if isinstance(first_elem, (tuple, list, np.ndarray)):
-                        return normalize_state(first_elem)
-                    return [int(s[0]), int(s[1])]
-            try:
-                s_array = np.array(s).flatten()
-                if len(s_array) >= 2:
-                    return [int(s_array[0]), int(s_array[1])]
-            except Exception:
-                pass
-            return [0, 0]
+    def update(self, agent_id, batch):
+        """
+        更新指定 agent 的 Q 网络。
 
-        states = np.array([normalize_state(b[0]) for b in batch], dtype=np.int64)
-        actions = np.array([b[1] for b in batch])
-        rewards = np.array([b[2] for b in batch], dtype=np.float32)
-        next_states = np.array([normalize_state(b[3]) for b in batch], dtype=np.int64)
-        dones = np.array([b[4] for b in batch], dtype=np.float32)
+        Args:
+            agent_id: agent 索引
+            batch: (states, actions, rewards, next_states, dones) numpy arrays
+        """
+        states, actions_arr, rewards, next_states, dones = batch
 
-        state_idx = state_to_idx_tensor(states, self.env.y_dim, self.device)
-        next_state_idx = state_to_idx_tensor(next_states, self.env.y_dim, self.device)
-        action_tensor = torch.tensor(actions, dtype=torch.long, device=self.device)
-        reward_tensor = torch.tensor(rewards, device=self.device)
-        target = self.env.target_states[agent_id]
-        target_idx = state_to_idx_tensor(target, self.env.y_dim, self.device).repeat(len(batch))
+        state_idx = torch.tensor(states, dtype=torch.long, device=self.device)
+        next_state_idx = torch.tensor(next_states, dtype=torch.long, device=self.device)
+        action_tensor = torch.tensor(actions_arr, dtype=torch.long, device=self.device)
+        reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=self.device)
+        dones_tensor = torch.tensor(dones, dtype=torch.float32, device=self.device)
 
-        q = self.q_nets[agent_id](state_idx, target_idx)
+        target_state = self.env.target_states[agent_id]
+        target_idx = self.env.pos_to_index(*target_state)
+        target_tensor = torch.full((len(states),), target_idx, dtype=torch.long, device=self.device)
+
+        q = self.q_nets[agent_id](state_idx, target_tensor)
         q = q.gather(1, action_tensor.unsqueeze(1)).squeeze(1)
+
         with torch.no_grad():
-            next_q = self.target_q_nets[agent_id](next_state_idx, target_idx)
+            next_q = self.target_q_nets[agent_id](next_state_idx, target_tensor)
             max_next_q = next_q.max(dim=1)[0]
-            td_target = reward_tensor + self.gamma * max_next_q * (1 - torch.tensor(dones, device=self.device))
+            td_target = reward_tensor + self.gamma * max_next_q * (1 - dones_tensor)
+
         loss = self.loss_fn(q, td_target)
         self.optimizers[agent_id].zero_grad()
         loss.backward()
@@ -188,12 +160,11 @@ class MADQN(Agent):
             checkpoint[f"target_qnet_{i}"] = self.target_q_nets[i].state_dict()
             checkpoint[f"optimizer_{i}"] = self.optimizers[i].state_dict()
         torch.save(checkpoint, path)
-        print(f"模型已保存到: {path}")
 
     def load(self, path: str):
         if not os.path.isfile(path):
             raise FileNotFoundError(f"未找到模型文件: {path}")
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         for i in range(self.num_agents):
             self.q_nets[i].load_state_dict(checkpoint[f"qnet_{i}"])
             self.target_q_nets[i].load_state_dict(checkpoint.get(f"target_qnet_{i}", checkpoint[f"qnet_{i}"]))
