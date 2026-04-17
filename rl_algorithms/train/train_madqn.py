@@ -11,7 +11,7 @@ from tqdm import tqdm
 from utils.logger_handler import get_logger
 
 
-def train_madqn(env, madqn, num_episodes=200, episode_length=5000, batch_size=128):
+def train_madqn(env, madqn, num_episodes=200, episode_length=5000, batch_size=128, train_interval=4):
     """训练 MADQN，返回 (madqn, return_list, agent_return_lists, ber_list, agent_ber_lists)。"""
     logger = get_logger("madqn")
     logger.info("")
@@ -46,14 +46,15 @@ def train_madqn(env, madqn, num_episodes=200, episode_length=5000, batch_size=12
                 madqn.buffers[i].add(states[i], actions[i], rewards[i], next_states[i], dones[i])
                 ep_return[i] += rewards[i]
 
-            # 更新网络
-            for i in range(madqn.num_agents):
-                if len(madqn.buffers[i]) >= batch_size:
-                    batch = madqn.buffers[i].sample(batch_size)
-                    madqn.update(i, batch)
+            # 更新网络（每 train_interval 步更新一次，标准 DQN 做法）
+            global_step += 1
+            if global_step % train_interval == 0:
+                for i in range(madqn.num_agents):
+                    if len(madqn.buffers[i]) >= batch_size:
+                        batch = madqn.buffers[i].sample(batch_size)
+                        madqn.update(i, batch)
 
             # 更新目标网络
-            global_step += 1
             if global_step % madqn.update_freq == 0:
                 for i in range(madqn.num_agents):
                     madqn.update_target_qnet(i)

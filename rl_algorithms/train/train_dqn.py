@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 
-def train_dqn(env, dqn, num_episodes=200, episode_length=5000, batch_size=128):
+def train_dqn(env, dqn, num_episodes=200, episode_length=5000, batch_size=128, train_interval=4):
     """训练 DQN，返回 (dqn, return_list)。"""
     dqn.batch_size = batch_size
     return_list = []
@@ -37,11 +37,11 @@ def train_dqn(env, dqn, num_episodes=200, episode_length=5000, batch_size=128):
             ep_return += reward
             dqn.buffer.add(state, action, reward, next_state, done)
 
-            if len(dqn.buffer) >= batch_size:
-                batch = dqn.buffer.sample(batch_size)
-                dqn.update(batch)
-
             global_step += 1
+            if global_step % train_interval == 0:
+                if len(dqn.buffer) >= batch_size:
+                    batch = dqn.buffer.sample(batch_size)
+                    dqn.update(batch)
             if global_step % dqn.update_freq == 0:
                 dqn.update_target_qnet()
 
