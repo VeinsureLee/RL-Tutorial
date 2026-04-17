@@ -1,553 +1,370 @@
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+"""
+多机器人网格导航环境（对齐论文）。
+120x60 网格 (48m x 24m, grid=0.4m)，动作空间 = 4方向 x p功率等级。
+"""
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from config.yml_config import get_env_config
-from config.generator.region_generator import get_los_nlos as _map_get_los_nlos
-from communication.ber_reward import get_ber_reward
 from PIL import Image
-import io
-from tqdm import tqdm
+from io import BytesIO
+
+from communication.precompute import PrecomputedRadioMap
+from communication.ber_reward import compute_ber_rewards
 
 
-# 兼容：对外保留同名函数，内部使用 config.yml_config
-def load_env_config_from_yml():
-    """从 yml 加载环境配置，委托给 config.yml_config.get_env_config。"""
-    return get_env_config()
+class MultiRobotEnv:
+    """
+    多机器人通感协同导航环境。
 
+    观测: agent 的网格坐标 (row, col) -> 单个整数 state_index
+    动作: 0 ~ (n_dirs * n_powers - 1) 的整数，解码为 (方向, 功率等级)
+    """
 
-# 设置matplotlib支持中文
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-
-
-class Env:
-    def __init__(self, env_config=None):
+    def __init__(self, config: dict):
         """
-        :param env_config: 可选。若为 None，则通过 load_env_config_from_yml() 从 yml 加载配置。
-                           也可传入由 load_env_config_from_yml() 返回的 dict 或兼容 dict。
+        Args:
+            config: dict，包含以下 key：
+                map_size, grid_size, antenna_position,
+                start_states, target_states, forbidden_areas,
+                action_directions, reward_goal, reward_closer,
+                reward_farther, reward_same, reward_forbidden, omega,
+                h_AP, h_robot, h_block,
+                n_antenna, carrier_freq_ghz, sigma_rayleigh,
+                P_sum, P_min_diff, num_power_levels,
+                channel_block_length, packet_size, noise_power_mw
         """
-        self.traj = []  # 存储所有agent的轨迹，traj[i]是第i个agent的轨迹列表
-        self.render_frames = []  # 存储每一帧的渲染数据
+        # 地图
+        self.map_size = tuple(int(x) for x in config["map_size"])
+        self.rows, self.cols = self.map_size
+        self.grid_size = config["grid_size"]
+        self.n_states = self.rows * self.cols
 
-        if env_config is None:
-            env_config = get_env_config()
+        # 兼容旧接口
+        self.x_dim = self.rows
+        self.y_dim = self.cols
+        self.state_num = self.n_states
 
-        self.map_size = np.array(env_config["map_size"], dtype=np.float64)
-        self.grid_size = float(env_config["grid_size"])
+        # Agent 起终点
+        self.start_states = [tuple(int(x) for x in s) for s in config["start_states"]]
+        self.target_states = [tuple(int(x) for x in s) for s in config["target_states"]]
+        self.num_agents = len(self.start_states)
 
-        self.grid_rows = int(round(self.map_size[0] / self.grid_size))
-        self.grid_cols = int(round(self.map_size[1] / self.grid_size))
-        self.size = (self.grid_rows, self.grid_cols)
-        self.x_dim = self.grid_rows
-        self.y_dim = self.grid_cols
-        self.state_num = self.x_dim * self.y_dim
-        self.action_space = list(env_config["action_space"])
-        self.action_dim = len(self.action_space)
+        # 禁区 -> 占用网格集合
+        self.forbidden_areas_raw = config["forbidden_areas"]
+        self.forbidden_set = self._build_forbidden_set(self.forbidden_areas_raw)
 
-        start_state_raw = self._continuous_to_discrete(env_config["start_states"])
-        target_state_raw = self._continuous_to_discrete(env_config["target_states"])
+        # 动作空间
+        self.directions = [tuple(d) for d in config["action_directions"]]
+        self.n_dirs = len(self.directions)
+        self.n_powers = config["num_power_levels"]
+        self.n_actions = self.n_dirs * self.n_powers
+        self.num_actions = self.n_actions  # 兼容旧接口
 
-        if isinstance(start_state_raw, list):
-            self.start_states = start_state_raw
-            self.num_agents = len(start_state_raw)
-        else:
-            self.start_states = [start_state_raw]
-            self.num_agents = 1
+        # 奖励参数（论文对齐）
+        self.reward_goal = config["reward_goal"]
+        self.reward_closer = config["reward_closer"]      # -0.8
+        self.reward_farther = config["reward_farther"]     # 0.1
+        self.reward_same = config["reward_same"]           # 0.0
+        self.reward_forbidden = config["reward_forbidden"]
+        self.omega = config["omega"]
 
-        if isinstance(target_state_raw, list):
-            self.target_states = target_state_raw
-        else:
-            self.target_states = [target_state_raw]
+        # 通信参数
+        self.P_sum = config["P_sum"]
+        self.N = config["channel_block_length"]
+        self.D = config["packet_size"]
+        self.noise_power = config["noise_power_mw"]
 
-        self.start_state = self.start_states[0] if len(self.start_states) > 0 else None
-        self.target_state = self.target_states[0] if len(self.target_states) > 0 else None
+        # 预计算无线电地图
+        self.radio_map = PrecomputedRadioMap(
+            map_size=self.map_size,
+            grid_size=self.grid_size,
+            antenna_position=tuple(config["antenna_position"]),
+            h_AP=config["h_AP"],
+            h_robot=config["h_robot"],
+            h_block=config["h_block"],
+            n_antenna=config["n_antenna"],
+            carrier_freq_ghz=config["carrier_freq_ghz"],
+            forbidden_areas=self.forbidden_areas_raw,
+            sigma_rayleigh=config.get("sigma_rayleigh", 1.2),
+        )
 
-        self.forbidden_states = self._process_forbidden_states(env_config["forbidden_areas"])
+        # 随机数生成器
+        self.rng = np.random.default_rng(config.get("random_seed", 42))
 
-        self._los_nlos_grid = env_config["los_nlos_grid"]
-        self._map_config_map_size = tuple(env_config["map_config_map_size"])
-        self._antenna_position = env_config["antenna_position"]
+        # 状态
+        self.positions = None    # (num_agents, 2) int array
+        self.done_flags = None   # (num_agents,) bool
+        self.trajectories = None # list of lists
 
-        self.agent_states = self.start_states.copy()
-        self.num_actions = len(self.action_space)
-
-        self.reward_target = float(env_config["reward_target"])
-        self.reward_forbidden = float(env_config["reward_forbidden"])
-        self.reward_step = float(env_config["reward_step"])
-        self.reward_closer_to_target = float(env_config["reward_closer_to_target"])
-        self.reward_ber_weight = float(env_config.get("reward_ber_weight", 1.0))
-
-        # 初始化时输出加载信息（重要信息展示，信道参数仅显示加载完毕）
         print("---------- 环境加载 ----------")
         print(f"  agent num:     {self.num_agents}")
-        print(f"  map_size:      {self.map_size[0]:.0f} x {self.map_size[1]:.0f}")
-        print(f"  grid_size:     {self.grid_size}")
-        print(f"  grid (rows x cols): {self.grid_rows} x {self.grid_cols}")
-        print(f"  action_dim:    {self.action_dim}")
-        print(f"  起点数量:      {len(self.start_states)},  终点数量: {len(self.target_states)}")
-        print("  信道参数:      加载完毕")
+        print(f"  grid (rows x cols): {self.rows} x {self.cols}")
+        print(f"  n_actions:     {self.n_actions} ({self.n_dirs} dirs x {self.n_powers} powers)")
+        print(f"  omega:         {self.omega}")
         print("------------------------------")
 
-    def _continuous_to_discrete(self, state):
-        """
-        将连续坐标转换为离散网格坐标，处理浮点运算问题
-        """
-        if isinstance(state, (list, tuple, np.ndarray)):
-            # 检查是否是单个坐标对（两个数字）还是状态列表
-            if len(state) == 2:
-                # 检查第一个元素是否是数字（单个坐标对）
-                first_elem = state[0]
-                if isinstance(first_elem, (int, float, np.integer, np.floating)):
-                    # 单个状态 (x, y)
-                    x, y = state
-                    # 将连续坐标除以grid_size并四舍五入，确保是整数
-                    grid_x = int(round(float(x) / self.grid_size))
-                    grid_y = int(round(float(y) / self.grid_size))
-                    # 确保在有效范围内
-                    grid_x = max(0, min(grid_x, self.grid_rows - 1))
-                    grid_y = max(0, min(grid_y, self.grid_cols - 1))
-                    return (grid_x, grid_y)
-                else:
-                    # 状态列表，递归处理每个状态
-                    return [self._continuous_to_discrete(s) for s in state]
-            else:
-                # 多个状态（长度不为2的列表）
-                return [self._continuous_to_discrete(s) for s in state]
-        return state
+    def _build_forbidden_set(self, areas):
+        """将禁区列表转为网格坐标集合。"""
+        forbidden = set()
+        for area in areas:
+            if isinstance(area, (list, tuple)):
+                if len(area) == 4:
+                    r, c, w, h = area
+                    for dr in range(int(w)):
+                        for dc in range(int(h)):
+                            forbidden.add((int(r + dr), int(c + dc)))
+                elif len(area) == 2:
+                    # [(r1,c1), (r2,c2)] 格式 或 (pos, size) 格式
+                    first, second = area
+                    if isinstance(first, (list, tuple)):
+                        (r1, c1), (r2, c2) = first, second
+                        for r in range(int(r1), int(r2)):
+                            for c in range(int(c1), int(c2)):
+                                forbidden.add((r, c))
+                    else:
+                        # (pos, size) - old format: pos=(x,y), size=scalar
+                        pos = first
+                        size = second
+                        if isinstance(pos, (list, tuple)) and len(pos) == 2:
+                            for dr in range(int(size)):
+                                for dc in range(int(size)):
+                                    forbidden.add((int(pos[0] + dr), int(pos[1] + dc)))
+        return forbidden
 
-    def _process_forbidden_states(self, forbidden_areas):
-        """
-        将禁止区域转换为离散网格坐标集合
-        """
-        forbidden_states = set()
-        if isinstance(forbidden_areas, (list, tuple)):
-            for area in forbidden_areas:
-                if isinstance(area, (tuple, list)) and len(area) == 2:
-                    pos, size = area
-                    # 将连续坐标转换为离散坐标
-                    grid_pos = self._continuous_to_discrete(pos)
-                    grid_size = int(round(float(size) / self.grid_size))
-                    # 添加该区域内的所有网格
-                    for i in range(grid_size):
-                        for j in range(grid_size):
-                            x = grid_pos[0] + i
-                            y = grid_pos[1] + j
-                            if 0 <= x < self.grid_rows and 0 <= y < self.grid_cols:
-                                forbidden_states.add((x, y))
-        return forbidden_states
+    def pos_to_index(self, row, col):
+        """网格坐标 -> 状态索引。"""
+        return int(row) * self.cols + int(col)
 
-    # Reset the environment to the start state
+    def index_to_pos(self, idx):
+        """状态索引 -> 网格坐标。"""
+        return (idx // self.cols, idx % self.cols)
+
+    def decode_action(self, action):
+        """
+        复合动作 -> (方向索引, 功率等级索引)。
+        action = dir_idx * n_powers + power_idx
+        """
+        dir_idx = action // self.n_powers
+        power_idx = action % self.n_powers
+        return dir_idx, power_idx
+
     def reset(self):
-        # 重置所有agent的状态
-        self.agent_states = [state for state in self.start_states]
-        # 为每个agent初始化轨迹
-        self.traj = [[state] for state in self.start_states]
-        self.render_frames = []
-        # 返回所有agent的状态
-        return self.agent_states.copy(), {}
+        """
+        重置环境。
 
-    # Take a step in the environment
-    # actions可以是单个动作（单个agent）或动作列表（多个agent）
+        Returns:
+            states: list of int，每个 agent 的初始状态索引
+        """
+        self.positions = np.array(self.start_states, dtype=int)
+        self.done_flags = np.zeros(self.num_agents, dtype=bool)
+        self.trajectories = [[(int(r), int(c))] for r, c in self.positions]
+
+        return [self.pos_to_index(r, c) for r, c in self.positions]
+
     def step(self, actions):
-        # 如果actions是单个动作（tuple且长度为2，且元素是数字），转换为列表（向后兼容）
-        if isinstance(actions, tuple) and len(actions) == 2:
-            # 检查是否是坐标对（动作）还是列表
-            if isinstance(actions[0], (int, float, np.integer, np.floating)) and isinstance(actions[1], (int, float, np.integer, np.floating)):
-                # 这是一个动作tuple，转换为列表
-                actions = [actions]
-        elif not isinstance(actions, (list, np.ndarray)):
-            # 其他非列表类型也转换为列表
-            actions = [actions]
-        
-        assert len(actions) == self.num_agents, f"动作数量 {len(actions)} 与agent数量 {self.num_agents} 不匹配"
-        
-        next_states = []
-        rewards = []
-        dones = []
-        
-        # 为每个agent执行动作
-        for agent_id in range(self.num_agents):
-            action = actions[agent_id]
-            assert action in self.action_space, f"Agent {agent_id} 的无效动作: {action}. Must be in {self.action_space}"
-            
-            current_state = self.agent_states[agent_id]
-            target_state = self.target_states[agent_id]
-            
-            # 根据action选择移动方向
-            next_state, reward = self._get_next_state_and_reward(current_state, action, target_state)
-            done = self._is_done(next_state, target_state)
-
-            # 更新agent状态（确保是整数，避免浮点误差）
-            next_state = (int(next_state[0]), int(next_state[1]))
-            self.agent_states[agent_id] = next_state
-            
-            # 记录轨迹
-            self.traj[agent_id].append(next_state)
-            
-            next_states.append(next_state)
-            rewards.append(reward)
-            dones.append(done)
-
-        # 根据 next_states 计算每个 agent 的 LOS/NLOS、分簇、功率分配与误码率，误码率放入 info
-        try:
-            _, ber_per_agent, sinr_per_agent = get_ber_reward(
-                next_states,
-                self.grid_size,
-                self._antenna_position,
-                get_los_nlos=self.get_los_nlos,
-            )
-            info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": sinr_per_agent}
-        except Exception:
-            ber_per_agent = [0.5] * self.num_agents
-            info = {"ber": ber_per_agent, "ber_per_agent": ber_per_agent, "sinr": [float("nan")] * self.num_agents}
-
-        # 通信质量奖励（tie-breaker）：
-        # 权重应远小于导航奖励，仅在"两条路都能靠近目标"时引导 agent 选 SINR 更优的方向。
-        # 已到达目标的 agent 不再获得通信奖励，避免干扰。
-        if self.reward_ber_weight > 0:
-            sinr_per_agent = info.get("sinr", [float("nan")] * self.num_agents)
-            for agent_id in range(self.num_agents):
-                if dones[agent_id]:
-                    continue  # 已到达目标，不再给通信奖励
-                sinr_val = sinr_per_agent[agent_id]
-                if np.isnan(sinr_val) or sinr_val <= 0:
-                    comm_reward = -self.reward_ber_weight
-                else:
-                    sinr_db = 10.0 * np.log10(sinr_val)
-                    sinr_db_clipped = np.clip(sinr_db, -20.0, 20.0)
-                    comm_reward = self.reward_ber_weight * sinr_db_clipped / 20.0
-                rewards[agent_id] += comm_reward
-
-        # 如果只有一个agent，返回单个值（向后兼容）
-        if self.num_agents == 1:
-            return next_states[0], rewards[0], dones[0], info
-        else:
-            return next_states, rewards, dones, info
-
-    # Determine the next state and reward based on current state and action
-    def _get_next_state_and_reward(self, state, action, target_state):
         """
-        根据当前状态和动作计算下一个状态和奖励
-        注意处理浮点运算问题，确保状态始终是整数网格坐标
-        :param state: 当前状态
-        :param action: 动作
-        :param target_state: 目标状态（不同agent可能有不同目标）
-        """
-        x, y = int(state[0]), int(state[1])  # 确保是整数
-        
-        # 根据action移动方向计算新状态
-        dx, dy = action
-        new_x = x + dx
-        new_y = y + dy
+        执行一步。
 
-        # 边界检查
-        if new_y >= self.grid_cols:  # down
-            new_y = self.grid_cols - 1
-            reward = self.reward_forbidden
-        elif new_x >= self.grid_rows:  # right
-            new_x = self.grid_rows - 1
-            reward = self.reward_forbidden
-        elif new_y < 0:  # up
-            new_y = 0
-            reward = self.reward_forbidden
-        elif new_x < 0:  # left
-            new_x = 0
-            reward = self.reward_forbidden
-        elif (new_x, new_y) == target_state:  # 到达目标
-            reward = self.reward_target
-        elif (new_x, new_y) in self.forbidden_states:  # 进入禁止区域
-            # 保持在原位置
-            new_x, new_y = x, y
-            reward = self.reward_forbidden
-        else:
-            reward = self.reward_step
-        
-        # 如果新位置比原位置更靠近目标，reward加1
-        if isinstance(target_state, (list, tuple)):
-            target_x, target_y = int(target_state[0]), int(target_state[1])
-            old_dist = abs(x - target_x) + abs(y - target_y)
-            new_dist = abs(new_x - target_x) + abs(new_y - target_y)
-            if new_dist < old_dist:
-                reward += self.reward_closer_to_target
-                
-        # 确保返回的是整数坐标
-        return (int(new_x), int(new_y)), reward
+        Args:
+            actions: list of int，每个 agent 的复合动作
 
-    # Check if the current state is the target state
-    def _is_done(self, state, target_state):
-        return state == target_state
+        Returns:
+            next_states: list of int
+            rewards: list of float
+            dones: list of bool
+            info: dict with 'ber', 'sinr', 'power_indices'
+        """
+        actions = list(actions)
+        power_indices = np.zeros(self.num_agents, dtype=int)
+        next_positions = self.positions.copy()
 
-    def get_los_nlos(self, x: int, y: int) -> str:
-        """
-        根据离散化后的坐标 (x, y) 返回该格点的 LOS/NLOS 分类。
-        若 env 的网格尺寸与 map_config 一致，则直接查表；
-        否则将 (x, y) 按比例映射到 map_config 的网格后查表。
-        :param x: 离散化行坐标（网格索引）
-        :param y: 离散化列坐标（网格索引）
-        :return: 'los'（视距）或 'nlos'（非视距）
-        """
-        map_rows, map_cols = self._map_config_map_size
-        if self.grid_rows == map_rows and self.grid_cols == map_cols:
-            return _map_get_los_nlos(x, y)
-        # 将 env 网格坐标线性映射到 map_config 网格
-        x_map = int(round(x * map_rows / max(1, self.grid_rows)))
-        y_map = int(round(y * map_cols / max(1, self.grid_cols)))
-        x_map = max(0, min(x_map, map_rows - 1))
-        y_map = max(0, min(y_map, map_cols - 1))
-        return _map_get_los_nlos(x_map, y_map, self._los_nlos_grid, self._map_config_map_size)
-
-    def render(self, mode='human', save_path=None):
-        """
-        渲染环境，显示agent的移动轨迹
-        :param mode: 'human' 显示图像, 'rgb_array' 返回RGB数组, 'save' 保存为文件
-        :param save_path: 如果mode='save'，指定保存路径
-        :return: 如果mode='rgb_array'，返回RGB数组；否则返回None
-        """
-        # 创建地图数组（与visualize_agent.py一致：1表示可通行，0表示禁止区域）
-        map_array = np.ones((self.grid_rows, self.grid_cols))
-        
-        # 标记禁止区域
-        for x, y in self.forbidden_states:
-            if 0 <= x < self.grid_rows and 0 <= y < self.grid_cols:
-                map_array[x, y] = 0
-        
-        # 创建图形（与visualize_agent.py一致的尺寸比例）
-        fig, ax = plt.subplots(figsize=(8, 8))
-        
-        # 显示地图（与visualize_agent.py一致：使用'gray' colormap和origin='lower'）
-        im = ax.imshow(map_array, cmap='gray', origin='lower', 
-                      extent=[0, self.grid_cols, 0, self.grid_rows],
-                      interpolation='nearest')
-        
-        # 添加colorbar（与visualize_agent.py一致）
-        plt.colorbar(im, ax=ax, label="Forbidden Area (0 = forbidden)")
-        
-        # 定义不同agent的颜色
-        colors = ['blue', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
-        
-        # 标记所有agent的起始位置
-        for i, start_state in enumerate(self.start_states):
-            if isinstance(start_state, (list, tuple)) and len(start_state) == 2:
-                start_x, start_y = start_state
-                color = colors[i % len(colors)]
-                ax.scatter([start_y], [start_x], c=color, marker='o', s=100, 
-                          edgecolors='black', linewidths=1, zorder=5)
-                ax.text(start_y, start_x, f'start{i+1}', fontsize=8, ha='left', va='bottom',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='lightgreen', alpha=0.7))
-        
-        # 标记所有agent的目标位置
-        for i, target_state in enumerate(self.target_states):
-            if isinstance(target_state, (list, tuple)) and len(target_state) == 2:
-                target_x, target_y = target_state
-                color = colors[i % len(colors)]
-                ax.scatter([target_y], [target_x], c=color, marker='*', s=180, 
-                          edgecolors='black', linewidths=1, zorder=5)
-                ax.text(target_y, target_x, f'target{i+1}', fontsize=8, ha='left', va='bottom',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='lightcoral', alpha=0.7))
-        
-        # 绘制所有agent的轨迹
-        for i, agent_traj in enumerate(self.traj):
-            if len(agent_traj) > 0:
-                color = colors[i % len(colors)]
-                traj_array = np.array(agent_traj)
-                ax.plot(traj_array[:, 1], traj_array[:, 0], '-', color=color, linewidth=2, 
-                       alpha=0.6, label=f'Agent {i+1}', zorder=3)
-                # 标记当前agent位置
-                if len(agent_traj) > 0:
-                    current_pos = agent_traj[-1]
-                    ax.scatter([current_pos[1]], [current_pos[0]], c=color, 
-                              marker='s', s=80, edgecolors='black', 
-                              linewidths=1, zorder=6)
-        
-        ax.set_xlabel('Y coordinate', fontsize=12)
-        ax.set_ylabel('X coordinate', fontsize=12)
-        ax.set_title('Map with Forbidden Areas and Agent States', fontsize=14)
-        ax.legend(loc='upper right')
-        
-        plt.tight_layout()
-        
-        if mode == 'human':
-            plt.show()
-        elif mode == 'save' and save_path:
-            plt.savefig(save_path, dpi=150, bbox_inches='tight')
-            plt.close()
-        elif mode == 'rgb_array':
-            fig.canvas.draw()
-            rgb_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            rgb_array = rgb_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            plt.close()
-            return rgb_array
-        else:
-            plt.close()
-        
-        return None
-
-    def render_animation(self, interval=200, save_path=None, max_frames=100):
-        """
-        生成动画，按帧显示agent的移动过程
-        :param interval: 每帧之间的时间间隔（毫秒）
-        :param save_path: 如果提供，保存动画为gif文件
-        :param max_frames: 保存GIF时的最大帧数，超过此数量将抽取关键帧（默认1000）
-        :return: FuncAnimation对象
-        """
-        if len(self.traj) == 0:
-            print("警告: 没有轨迹数据，请先运行step()方法")
-            return None
-        
-        # 创建地图数组（与visualize_agent.py一致）
-        map_array = np.ones((self.grid_rows, self.grid_cols))
-        for x, y in self.forbidden_states:
-            if 0 <= x < self.grid_rows and 0 <= y < self.grid_cols:
-                map_array[x, y] = 0
-        
-        fig, ax = plt.subplots(figsize=(8, 8))
-        
-        # 显示地图（与visualize_agent.py一致：使用'gray' colormap和origin='lower'）
-        im = ax.imshow(map_array, cmap='gray', origin='lower',
-                      extent=[0, self.grid_cols, 0, self.grid_rows],
-                      interpolation='nearest')
-        
-        # 添加colorbar（与visualize_agent.py一致）
-        plt.colorbar(im, ax=ax, label="Forbidden Area (0 = forbidden)")
-        
-        # 定义不同agent的颜色
-        colors = ['blue', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
-        
-        # 标记所有agent的起始和目标位置
-        for i, (start_state, target_state) in enumerate(zip(self.start_states, self.target_states)):
-            color = colors[i % len(colors)]
-            if isinstance(start_state, (list, tuple)) and len(start_state) == 2:
-                start_x, start_y = start_state
-                ax.scatter([start_y], [start_x], c=color, marker='o', s=100,
-                          edgecolors='black', linewidths=1, zorder=5)
-                ax.text(start_y, start_x, f'start{i+1}', fontsize=8, ha='left', va='bottom',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='lightgreen', alpha=0.7))
-            
-            if isinstance(target_state, (list, tuple)) and len(target_state) == 2:
-                target_x, target_y = target_state
-                ax.scatter([target_y], [target_x], c=color, marker='*', s=180,
-                          edgecolors='black', linewidths=1, zorder=5)
-                ax.text(target_y, target_x, f'target{i+1}', fontsize=8, ha='left', va='bottom',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='lightcoral', alpha=0.7))
-        
-        # 初始化所有agent的轨迹线和位置
-        lines = []
-        points = []
         for i in range(self.num_agents):
-            color = colors[i % len(colors)]
-            line, = ax.plot([], [], '-', color=color, linewidth=2, alpha=0.6, zorder=3)
-            point, = ax.plot([], [], 's', color=color, markersize=8, zorder=6)
-            lines.append(line)
-            points.append(point)
-        
-        ax.set_xlabel('Y coordinate', fontsize=12)
-        ax.set_ylabel('X coordinate', fontsize=12)
-        ax.set_xlim(-0.5, self.grid_cols - 0.5)
-        ax.set_ylim(-0.5, self.grid_rows - 0.5)
-        
-        # 计算最大轨迹长度
-        max_traj_length = max([len(traj) for traj in self.traj]) if self.traj else 0
-        
-        # 创建标题文本对象，使用ax.text以便在blit模式下更新
-        # 位置在axes上方，使用axes坐标转换
-        title_text = ax.text(0.5, 1.05, 'Agent Movement Animation', 
-                            transform=ax.transAxes, ha='center', va='bottom', 
-                            fontsize=14, weight='bold')
-        
-        def animate(frame):
-            # 更新所有agent的轨迹
-            for i, agent_traj in enumerate(self.traj):
-                if frame < len(agent_traj):
-                    traj_so_far = agent_traj[:frame+1]
-                    traj_array = np.array(traj_so_far)
-                    lines[i].set_data(traj_array[:, 1], traj_array[:, 0])
-                    
-                    # 更新agent当前位置
-                    current_pos = traj_so_far[-1]
-                    points[i].set_data([current_pos[1]], [current_pos[0]])
-                elif len(agent_traj) > 0:
-                    # 如果这个agent已经完成，显示完整轨迹和最终位置
-                    traj_array = np.array(agent_traj)
-                    lines[i].set_data(traj_array[:, 1], traj_array[:, 0])
-                    final_pos = agent_traj[-1]
-                    points[i].set_data([final_pos[1]], [final_pos[0]])
-            
-            # 更新标题文本
-            title_text.set_text(f'Agent Movement Animation (Step: {frame+1}/{max_traj_length})')
-            
-            # 返回所有需要更新的对象（包括标题）
-            return lines + points + [title_text]
-        
-        anim = FuncAnimation(fig, animate, frames=max_traj_length, 
-                           interval=interval, blit=True, repeat=True)
-        
-        if save_path:
-            # 如果帧数超过max_frames，使用关键帧抽取
-            if max_traj_length > max_frames:
-                print(f"总帧数 {max_traj_length} 超过最大帧数 {max_frames}，开始抽取关键帧...")
-                # 抽取关键帧：第一帧、最后一帧，以及中间均匀采样
-                key_frames = [0]  # 第一帧
-                if max_traj_length > 1:
-                    # 中间均匀采样
-                    step = (max_traj_length - 1) / (max_frames - 1)
-                    for i in range(1, max_frames - 1):
-                        frame_idx = int(round(i * step))
-                        if frame_idx < max_traj_length and frame_idx not in key_frames:
-                            key_frames.append(frame_idx)
-                    # 最后一帧
-                    if max_traj_length - 1 not in key_frames:
-                        key_frames.append(max_traj_length - 1)
-                
-                print(f"抽取了 {len(key_frames)} 个关键帧（从 {max_traj_length} 帧中）")
-                
-                # 渲染关键帧并保存为GIF
-                frames = []
-                print("正在渲染关键帧...")
-                for frame_idx in tqdm(key_frames, desc="渲染进度", total=len(key_frames)):
-                    # 更新动画到指定帧
-                    animate(frame_idx)
-                    fig.canvas.draw()
-                    
-                    # 将matplotlib图形转换为PIL Image
-                    buf = io.BytesIO()
-                    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-                    buf.seek(0)
-                    img = Image.open(buf)
-                    frames.append(img.copy())
-                    buf.close()
-                
-                # 保存为GIF
-                if len(frames) > 0:
-                    print("正在保存GIF文件...")
-                    frames[0].save(
-                        save_path,
-                        save_all=True,
-                        append_images=frames[1:],
-                        duration=interval,  # 每帧持续时间（毫秒）
-                        loop=0  # 无限循环
-                    )
-                    print(f"GIF已保存到: {save_path} (共 {len(frames)} 帧)")
+            if self.done_flags[i]:
+                continue
+
+            dir_idx, power_idx = self.decode_action(actions[i])
+            power_indices[i] = power_idx
+
+            # 移动
+            dr, dc = self.directions[dir_idx]
+            new_r = int(self.positions[i, 0] + dr)
+            new_c = int(self.positions[i, 1] + dc)
+
+            # 边界检查
+            if 0 <= new_r < self.rows and 0 <= new_c < self.cols:
+                next_positions[i] = [new_r, new_c]
+
+        # 计算奖励
+        rewards = np.zeros(self.num_agents)
+        active_indices = np.where(~self.done_flags)[0]
+
+        for i in active_indices:
+            r, c = next_positions[i]
+
+            # 禁区惩罚
+            if (r, c) in self.forbidden_set:
+                rewards[i] = self.reward_forbidden
+                next_positions[i] = self.positions[i].copy()  # 撤回移动
+                continue
+
+            # 到达目标
+            if (r, c) == self.target_states[i]:
+                rewards[i] = self.reward_goal
+                self.done_flags[i] = True
+                continue
+
+            # 距离奖励（论文式 3-1）
+            old_dist = abs(self.positions[i, 0] - self.target_states[i][0]) + \
+                       abs(self.positions[i, 1] - self.target_states[i][1])
+            new_dist = abs(r - self.target_states[i][0]) + abs(c - self.target_states[i][1])
+
+            if new_dist < old_dist:
+                rewards[i] = self.reward_closer    # -0.8 (论文)
+            elif new_dist > old_dist:
+                rewards[i] = self.reward_farther   # 0.1 (论文)
             else:
-                # 帧数不多，使用原来的方法
-                print(f"正在保存GIF文件（共 {max_traj_length} 帧）...")
-                anim.save(save_path, writer='pillow', fps=1000//interval)
-                print(f"GIF已保存到: {save_path}")
-        
-        plt.tight_layout()
-        plt.show()
-        
-        return anim
+                rewards[i] = self.reward_same      # 0.0
 
+        # 更新位置
+        self.positions = next_positions
 
-if __name__ == "__main__":
-    env = Env()
-    env.reset()
+        # 记录轨迹
+        for i in range(self.num_agents):
+            self.trajectories[i].append((int(self.positions[i, 0]), int(self.positions[i, 1])))
 
-    # 输入离散化坐标 (x, y)，得到 LOS/NLOS 分类
-    print(env.get_los_nlos(0, 0))   # 例如 'los' 或 'nlos'
-    print(env.get_los_nlos(30, 60))  # 例如天线附近
+        # 通信质量计算（只对活跃 agent）
+        ber_info = {"ber": np.zeros(self.num_agents), "sinr": np.zeros(self.num_agents),
+                    "reward": np.zeros(self.num_agents)}
+
+        if len(active_indices) > 0:
+            active_positions = self.positions[active_indices]
+            active_powers = power_indices[active_indices]
+
+            ber_result = compute_ber_rewards(
+                radio_map=self.radio_map,
+                positions=active_positions,
+                power_actions=active_powers,
+                P_sum=self.P_sum,
+                num_power_levels=self.n_powers,
+                N=self.N,
+                D=self.D,
+                noise_power=self.noise_power,
+                rng=self.rng,
+            )
+
+            for j, idx in enumerate(active_indices):
+                ber_info["ber"][idx] = ber_result["ber"][j]
+                ber_info["sinr"][idx] = ber_result["sinr"][j]
+                ber_info["reward"][idx] = ber_result["reward"][j]
+
+            # 通信奖励加入总奖励
+            for idx in active_indices:
+                if not self.done_flags[idx] and (int(self.positions[idx, 0]), int(self.positions[idx, 1])) not in self.forbidden_set:
+                    rewards[idx] += self.omega * ber_info["reward"][idx]
+
+        # 构造返回值
+        next_states = [self.pos_to_index(r, c) for r, c in self.positions]
+        dones = self.done_flags.tolist()
+
+        info = {
+            "ber": ber_info["ber"],
+            "sinr": ber_info["sinr"],
+            "power_indices": power_indices,
+        }
+
+        return next_states, rewards.tolist(), dones, info
+
+    @property
+    def all_done(self):
+        """所有 agent 是否都到达目标。"""
+        return bool(np.all(self.done_flags))
+
+    def render_frame(self, ax=None):
+        """渲染当前帧到 matplotlib axes，用于 GIF 生成。"""
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+        ax.clear()
+        ax.set_xlim(-0.5, self.cols - 0.5)
+        ax.set_ylim(-0.5, self.rows - 0.5)
+        ax.set_aspect('equal')
+        ax.invert_yaxis()
+
+        # 禁区
+        for (r, c) in self.forbidden_set:
+            ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color='gray', alpha=0.5))
+
+        # AP
+        ap = self.radio_map.ap_grid
+        ax.plot(ap[1], ap[0], 'r^', markersize=10, label='AP')
+
+        # Agent 轨迹和当前位置
+        colors = plt.cm.tab10(np.linspace(0, 1, self.num_agents))
+        for i in range(self.num_agents):
+            traj = self.trajectories[i]
+            if len(traj) > 1:
+                traj_arr = np.array(traj)
+                ax.plot(traj_arr[:, 1], traj_arr[:, 0], '-', color=colors[i], alpha=0.5, linewidth=1)
+
+            # 当前位置
+            r, c = self.positions[i]
+            marker = '*' if self.done_flags[i] else 'o'
+            ax.plot(c, r, marker, color=colors[i], markersize=8, label=f'Agent {i}')
+
+            # 目标
+            tr, tc = self.target_states[i]
+            ax.plot(tc, tr, 'x', color=colors[i], markersize=8)
+
+        ax.legend(loc='upper right', fontsize=6)
+        return ax
+
+    def save_gif(self, path, frames_data, fps=5):
+        """
+        从帧数据列表生成 GIF。
+
+        Args:
+            path: 保存路径
+            frames_data: list of (positions, done_flags, trajectories) tuples
+            fps: 帧率
+        """
+        images = []
+        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+        for positions, done_flags, trajectories in frames_data:
+            ax.clear()
+            ax.set_xlim(-0.5, self.cols - 0.5)
+            ax.set_ylim(-0.5, self.rows - 0.5)
+            ax.set_aspect('equal')
+            ax.invert_yaxis()
+
+            for (r, c) in self.forbidden_set:
+                ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color='gray', alpha=0.5))
+
+            ap = self.radio_map.ap_grid
+            ax.plot(ap[1], ap[0], 'r^', markersize=10)
+
+            colors = plt.cm.tab10(np.linspace(0, 1, self.num_agents))
+            for i in range(self.num_agents):
+                traj = trajectories[i]
+                if len(traj) > 1:
+                    traj_arr = np.array(traj)
+                    ax.plot(traj_arr[:, 1], traj_arr[:, 0], '-', color=colors[i], alpha=0.5)
+                r, c = positions[i]
+                marker = '*' if done_flags[i] else 'o'
+                ax.plot(c, r, marker, color=colors[i], markersize=8)
+                tr, tc = self.target_states[i]
+                ax.plot(tc, tr, 'x', color=colors[i], markersize=8)
+
+            buf = BytesIO()
+            fig.savefig(buf, format='png', dpi=80, bbox_inches='tight')
+            buf.seek(0)
+            images.append(Image.open(buf).copy())
+            buf.close()
+
+        plt.close(fig)
+
+        if images:
+            duration = int(1000 / fps)
+            images[0].save(path, save_all=True, append_images=images[1:],
+                          duration=duration, loop=0)
