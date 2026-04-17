@@ -1,119 +1,149 @@
 """
-功能模块：根据 agent 网格位置计算 NOMA 分簇、功率分配与误码率，返回 BER 与 reward。
-供 env、rl_algorithms 等调用，不包含测试或调试逻辑。
+BER 奖励计算入口：整合预计算表、信道向量、分簇、预编码、SINR/BER。
+env.step() 调用此模块的 compute_ber_rewards()。
 """
 import numpy as np
-
-from communication.channel import (
-    channel_parameter,
-    channel_vector,
-    channel_group,
-    path_loss_batch,
-    compute_arrival_angles,
-)
+from communication.precompute import PrecomputedRadioMap
+from communication.SIC import compute_sinr, compute_ber, ber_to_reward, get_power_levels
 from communication.diagonalization_precoding import matrix_cal
-from communication.SIC import compute_sinr, epsilon, ber_to_reward, get_noma_powers
-from communication.utils import dbm2watt
-from config.yml_config import _get_parser
 
 
-def _get_grid_size():
-    """从环境参数获取网格物理尺寸（米），若无则使用默认 0.4"""
-    try:
-        from config.yml_config import _get_env_parser
-        return float(_get_env_parser().parse_args().grid_size)
-    except Exception:
-        return 0.4
-
-
-def get_ber_reward(agent_states, grid_size, antenna_position, get_los_nlos=None, P_max=None, verbose_sinr=False):
+def cluster_agents(H, K):
     """
-    根据当前 agent 网格位置计算信道、分簇、功率分配与误码率，返回每个 agent 的 BER 及 reward。
-    分簇：按信道向量范数分为大组/小组，大组第 k 个与小组第 k 个为一簇。
-    功率：大组 P_max/2^p..P_max/2^(2p-1)，小组 P_max/2..P_max/2^p。
-    :param agent_states: 列表，每个元素为 (grid_x, grid_y) 网格坐标
-    :param grid_size: 网格对应的物理尺寸（米）
-    :param antenna_position: 基站天线位置 (x, y)，与地图同一坐标尺度
-    :param get_los_nlos: 可选，函数 (x, y) -> 'los'|'nlos'，用于每个格点；None 则全用 LOS
-    :param P_max: 最大功率 (W)，None 则从 config 读取
-    :param verbose_sinr: 是否打印每个簇的 SINR 计算过程
-    :return: (rewards_ber, ber_per_agent, sinr_per_agent)，分别为 -log(ber) 列表、误码率列表、SINR 列表（线性值）
+    NOMA 分簇：按信道增益 |h_k|^2 降序排列，第 m 名与第 K/2+m 名配对（论文 2.3.1）。
+
+    Args:
+        H: (K, N_t) complex，信道向量矩阵
+        K: agent 数量
+
+    Returns:
+        clusters: list of (strong_idx, weak_idx)，每簇包含强弱用户的原始索引
+        sorted_indices: 按信道增益降序排列的索引
     """
-    if P_max is None:
-        P_max = _get_parser().parse_args().P_max
-    num_agents = len(agent_states)
-    if num_agents == 0:
-        return [], [], []
+    gains = np.sum(np.abs(H) ** 2, axis=1)  # (K,) 信道增益
+    sorted_indices = np.argsort(-gains)  # 降序
 
-    if get_los_nlos is not None:
-        models = [get_los_nlos(int(s[0]), int(s[1])).upper() for s in agent_states]
-    else:
-        models = ["LOS"] * num_agents
-    # 天线与位置统一为物理距离（米）：config 中 antenna_position 为网格坐标，需乘以 grid_size
-    antenna_phys = np.asarray(antenna_position, dtype=np.float64).reshape(2) * grid_size
-    positions = np.array([[float(s[0]) * grid_size, float(s[1]) * grid_size] for s in agent_states], dtype=np.float64)
-    distances = np.linalg.norm(positions - antenna_phys, axis=1)
-    distances = np.maximum(distances, 1e-3)
-    chn_paras = channel_parameter(distances, models=models)
-    # 根据 agent 与天线的几何位置计算各用户到达角，而非固定 π/2
-    thetas = compute_arrival_angles(positions, antenna_phys)
-    chn_vcts = channel_vector(chn_paras, thetas)
-    groups = channel_group(chn_vcts)
-    large_group = groups["large_group"]
-    small_group = groups["small_group"]
-    p = min(len(large_group["indices"]), len(small_group["indices"]))
-    cluster_list = [
-        np.vstack([large_group["vectors"][k], small_group["vectors"][k]])
-        for k in range(p)
-    ]
-    large_powers, small_powers = get_noma_powers(P_max, p)
+    M = K // 2
+    clusters = []
+    for m in range(M):
+        strong_idx = sorted_indices[m]       # 信道好的
+        weak_idx = sorted_indices[M + m]     # 信道差的
+        clusters.append((strong_idx, weak_idx))
 
-    ber_per_agent = np.ones(num_agents) * 0.5
-    sinr_per_agent = np.full(num_agents, np.nan, dtype=np.float64)
+    return clusters, sorted_indices
 
-    for m in range(p):
-        H_m = cluster_list[m]
-        w_m = matrix_cal(cluster_list, m)
-        if w_m.size == 0 or w_m.shape[1] < 2:
-            continue
-        w = w_m[:, 0]
-        w_norm = np.linalg.norm(w)
-        if w_norm < 1e-12:
-            continue
-        w = w / w_norm
-        h_strong = large_group["vectors"][m]
-        h_weak = small_group["vectors"][m]
-        P1 = large_powers[m]
-        P2 = small_powers[m]
-        if verbose_sinr:
-            print("\n--- 簇 {} (强用户 agent {}, 弱用户 agent {}) ---".format(
-                m, large_group["indices"][m], small_group["indices"][m]))
-        sinr_1, sinr_2 = compute_sinr(h_strong, h_weak, w, P1, P2, verbose=verbose_sinr)
-        ber_per_agent[large_group["indices"][m]] = epsilon(sinr_1)
-        ber_per_agent[small_group["indices"][m]] = epsilon(sinr_2)
-        sinr_per_agent[large_group["indices"][m]] = sinr_1
-        sinr_per_agent[small_group["indices"][m]] = sinr_2
 
-    if num_agents % 2 != 0 and len(small_group["indices"]) > p:
-        idx_extra = small_group["indices"][p]
-        H_single = small_group["vectors"][p : p + 1]
-        cluster_list_single = cluster_list + [H_single]
-        w_single = matrix_cal(cluster_list_single, p)
-        if w_single.size > 0 and np.linalg.norm(w_single) > 1e-12:
-            w_single = w_single[:, 0] / np.linalg.norm(w_single[:, 0])
-            g = np.abs(np.dot(H_single.ravel(), w_single.ravel())) ** 2
-            _args = _get_parser().parse_args()
-            sigma = dbm2watt(_args.power_AWGN) * getattr(_args, 'channel_bandwidth', 1.0e7)
-            sigma = max(sigma, 1e-25)
-            sinr = (P_max / 2) * g / sigma
-            if verbose_sinr:
-                print("\n--- 单用户 (agent {}) ---".format(idx_extra))
-                print("  [SINR 计算] σ² = {:.6e} W,  g = |h^H w|² = {:.6e},  P = P_max/2 = {:.6e} W".format(sigma, g, P_max / 2))
-                print("  [SINR 计算] SINR = P*g/σ² = {:.6e} = {:.2f} dB".format(sinr, 10 * np.log10(max(sinr, 1e-20))))
-            ber_per_agent[idx_extra] = epsilon(sinr)
-            sinr_per_agent[idx_extra] = sinr
+def compute_ber_rewards(
+    radio_map: PrecomputedRadioMap,
+    positions,
+    power_actions,
+    P_sum,
+    num_power_levels,
+    N,
+    D,
+    noise_power,
+    rng=None,
+):
+    """
+    完整 BER 奖励计算流程。
 
-    rewards_ber = [ber_to_reward(ber_per_agent[i]) for i in range(num_agents)]
-    ber_list = [float(ber_per_agent[i]) for i in range(num_agents)]
-    sinr_list = [float(sinr_per_agent[i]) for i in range(num_agents)]
-    return rewards_ber, ber_list, sinr_list
+    Args:
+        radio_map: PrecomputedRadioMap 实例
+        positions: (K, 2) int array，agent 网格坐标
+        power_actions: (K,) int array，每个 agent 选择的功率等级索引
+        P_sum: 总发射功率 (mW)
+        num_power_levels: 可用功率数 p
+        N: 信道块长度
+        D: 数据包大小
+        noise_power: 噪声功率 (mW)
+        rng: numpy random generator
+
+    Returns:
+        dict with:
+            ber: (K,) 每个 agent 的 BER
+            sinr: (K,) 每个 agent 的 SINR
+            reward: (K,) 每个 agent 的通信奖励 R_rate
+    """
+    positions = np.array(positions, dtype=int)
+    K = len(positions)
+
+    # 1. 获取信道向量（查预计算表 + Rayleigh 衰落）
+    H = radio_map.get_channel_vectors(positions, rng=rng)
+
+    # 2. 处理 K=1 的特殊情况
+    if K == 1:
+        gain = np.sum(np.abs(H[0]) ** 2)
+        P_max_cluster = P_sum
+        strong_powers, _ = get_power_levels(P_max_cluster, num_power_levels)
+        p_idx = min(power_actions[0], len(strong_powers) - 1)
+        power = strong_powers[p_idx]
+        sinr_val = (power * gain) / noise_power
+        ber_val = compute_ber(np.array([sinr_val]), N, D)
+        reward_val = ber_to_reward(ber_val)
+        return {
+            "ber": ber_val,
+            "sinr": np.array([sinr_val]),
+            "reward": reward_val,
+        }
+
+    # 3. 分簇
+    clusters, sorted_indices = cluster_agents(H, K)
+    M = len(clusters)
+    P_max_per_cluster = P_sum / M
+
+    # 功率等级表
+    strong_powers_table, weak_powers_table = get_power_levels(P_max_per_cluster, num_power_levels)
+
+    # 4. BD 预编码
+    # 构建每簇的信道矩阵
+    H_clusters = []
+    for s_idx, w_idx in clusters:
+        H_clusters.append(np.vstack([H[s_idx:s_idx+1], H[w_idx:w_idx+1]]))  # (2, N_t)
+
+    W = matrix_cal(H_clusters)  # list of (N_t, 1) precoding vectors
+
+    # 5. 计算等效信道增益和 SINR
+    ber_all = np.zeros(K)
+    sinr_all = np.zeros(K)
+
+    for m, (s_idx, w_idx) in enumerate(clusters):
+        w_m = W[m]  # (N_t, 1)
+
+        # 等效信道增益 |h * w|^2
+        g_strong = np.abs(H[s_idx] @ w_m) ** 2
+        g_weak = np.abs(H[w_idx] @ w_m) ** 2
+
+        # 根据 agent 的功率动作选择功率
+        p_s_idx = min(power_actions[s_idx], len(strong_powers_table) - 1)
+        p_w_idx = min(power_actions[w_idx], len(weak_powers_table) - 1)
+        p_strong = strong_powers_table[p_s_idx]
+        p_weak = weak_powers_table[p_w_idx]
+
+        # SINR
+        sinr_s = float((p_strong * g_strong) / noise_power)
+        sinr_w = float((p_weak * g_weak) / (p_strong * g_weak + noise_power))
+
+        sinr_all[s_idx] = sinr_s
+        sinr_all[w_idx] = sinr_w
+
+        # BER
+        ber_all[s_idx] = float(compute_ber(np.array([sinr_s]), N, D)[0])
+        ber_all[w_idx] = float(compute_ber(np.array([sinr_w]), N, D)[0])
+
+    # 处理 K 为奇数时落单的 agent
+    if K % 2 == 1:
+        last_idx = sorted_indices[-1]
+        gain = np.sum(np.abs(H[last_idx]) ** 2)
+        p_idx = min(power_actions[last_idx], len(strong_powers_table) - 1)
+        power = strong_powers_table[p_idx]
+        sinr_val = (power * gain) / noise_power
+        sinr_all[last_idx] = sinr_val
+        ber_all[last_idx] = float(compute_ber(np.array([sinr_val]), N, D)[0])
+
+    reward_all = ber_to_reward(ber_all)
+
+    return {
+        "ber": ber_all,
+        "sinr": sinr_all,
+        "reward": reward_all,
+    }

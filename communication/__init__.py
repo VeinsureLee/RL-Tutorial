@@ -10,13 +10,12 @@ from communication.channel import (
     channel_group,
     number_of_antenna,
 )
-from communication.ber_reward import get_ber_reward
+from communication.ber_reward import cluster_agents, compute_ber_rewards
 from communication.SIC import (
     compute_sinr,
-    epsilon,
-    allocate_power,
+    compute_ber,
     ber_to_reward,
-    get_noma_powers,
+    get_power_levels,
 )
 from communication.utils import watt2dbm, dbm2watt, judge_los_nlos, distances_calculation
 from communication.diagonalization_precoding import matrix_cal, build_W_matrix
@@ -29,12 +28,12 @@ __all__ = [
     "channel_vector",
     "channel_group",
     "number_of_antenna",
-    "get_ber_reward",
+    "cluster_agents",
+    "compute_ber_rewards",
     "compute_sinr",
-    "epsilon",
-    "allocate_power",
+    "compute_ber",
     "ber_to_reward",
-    "get_noma_powers",
+    "get_power_levels",
     "watt2dbm",
     "dbm2watt",
     "judge_los_nlos",
