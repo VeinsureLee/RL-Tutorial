@@ -1,0 +1,4 @@
+2026-04-21 22:57:27,173 - dqn - INFO - trainer.py:85 - DQN training start: iters=1 episodes=2 ep_len=20 agents=1 lr=1.0e-04 gamma=0.90 eps=0.50 bs=16
+2026-04-21 22:57:27,195 - dqn - DEBUG - trainer.py:150 - iter 1 ep 1/2 R=-43.0 step=-20.0 approach=-23.0 comm=0.0 -log10BER=20.00 eps=0.495
+2026-04-21 22:57:27,218 - dqn - DEBUG - trainer.py:150 - iter 1 ep 2/2 R=-24.0 step=-20.0 approach=-4.0 comm=0.0 -log10BER=20.00 eps=0.490
+2026-04-21 22:57:27,219 - dqn - INFO - trainer.py:165 - DQN training done: total_eps=2 avg_return=-33.50 last10_avg_return=-33.50

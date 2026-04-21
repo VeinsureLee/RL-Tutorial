@@ -37,5 +37,5 @@ P_min_diff:
   description: "SIC最小功率差 (mW)"
 
 num_power_levels:
-  value: 3
-  description: "可用功率数 p，功率空间大小，论文默认 p=3"
+  value: 1
+  description: "Number of discrete power levels p. Set to 1 during nav-only training so n_actions = n_dirs (matches 3bede13 5-action layout). Restore to 3 after nav converges."

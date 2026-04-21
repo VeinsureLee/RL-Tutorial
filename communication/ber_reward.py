@@ -43,6 +43,10 @@ def compute_ber_rewards(
     D,
     noise_power,
     rng=None,
+    ber_reward_min=-1.0,
+    ber_reward_max=1.0,
+    ber_worst=0.5,
+    ber_best=1e-10,
 ):
     """
     完整 BER 奖励计算流程。
@@ -79,7 +83,13 @@ def compute_ber_rewards(
         power = strong_powers[p_idx]
         sinr_val = (power * gain) / noise_power
         ber_val = compute_ber(np.array([sinr_val]), N, D)
-        reward_val = ber_to_reward(ber_val)
+        reward_val = ber_to_reward(
+            ber_val,
+            reward_min=ber_reward_min,
+            reward_max=ber_reward_max,
+            ber_worst=ber_worst,
+            ber_best=ber_best,
+        )
         return {
             "ber": ber_val,
             "sinr": np.array([sinr_val]),
@@ -144,7 +154,13 @@ def compute_ber_rewards(
         sinr_all[last_idx] = sinr_val
         ber_all[last_idx] = float(compute_ber(np.array([sinr_val]), N, D)[0])
 
-    reward_all = ber_to_reward(ber_all)
+    reward_all = ber_to_reward(
+        ber_all,
+        reward_min=ber_reward_min,
+        reward_max=ber_reward_max,
+        ber_worst=ber_worst,
+        ber_best=ber_best,
+    )
 
     return {
         "ber": ber_all,

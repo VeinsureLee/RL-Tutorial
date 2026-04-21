@@ -1,0 +1,22 @@
+2026-04-22 00:03:02,161 - madqn - INFO - trainer.py:85 - MADQN training start: iters=1 episodes=20 ep_len=500 agents=8 lr=1.0e-03 gamma=0.99 eps=0.50 bs=64
+2026-04-22 00:03:08,464 - madqn - DEBUG - trainer.py:150 - iter 1 ep 1/20 R=-968.0 step=-1433.0 approach=465.0 comm=0.0 -log10BER=18.25 eps=0.475
+2026-04-22 00:03:13,444 - madqn - DEBUG - trainer.py:150 - iter 1 ep 2/20 R=-337.0 step=-755.0 approach=418.0 comm=0.0 -log10BER=19.60 eps=0.451
+2026-04-22 00:03:16,567 - madqn - DEBUG - trainer.py:150 - iter 1 ep 3/20 R=-197.0 step=-591.0 approach=394.0 comm=0.0 -log10BER=19.82 eps=0.429
+2026-04-22 00:03:18,602 - madqn - DEBUG - trainer.py:150 - iter 1 ep 4/20 R=-50.0 step=-332.0 approach=282.0 comm=0.0 -log10BER=19.62 eps=0.407
+2026-04-22 00:03:20,965 - madqn - DEBUG - trainer.py:150 - iter 1 ep 5/20 R=-88.0 step=-386.0 approach=298.0 comm=0.0 -log10BER=19.69 eps=0.387
+2026-04-22 00:03:23,058 - madqn - DEBUG - trainer.py:150 - iter 1 ep 6/20 R=-85.0 step=-320.0 approach=235.0 comm=0.0 -log10BER=19.54 eps=0.368
+2026-04-22 00:03:25,725 - madqn - DEBUG - trainer.py:150 - iter 1 ep 7/20 R=-64.0 step=-395.0 approach=331.0 comm=0.0 -log10BER=19.64 eps=0.349
+2026-04-22 00:03:28,269 - madqn - DEBUG - trainer.py:150 - iter 1 ep 8/20 R=-104.0 step=-378.0 approach=274.0 comm=0.0 -log10BER=19.56 eps=0.332
+2026-04-22 00:03:30,230 - madqn - DEBUG - trainer.py:150 - iter 1 ep 9/20 R=-50.0 step=-328.0 approach=278.0 comm=0.0 -log10BER=19.60 eps=0.315
+2026-04-22 00:03:32,006 - madqn - DEBUG - trainer.py:150 - iter 1 ep 10/20 R=-14.0 step=-309.0 approach=295.0 comm=0.0 -log10BER=19.28 eps=0.299
+2026-04-22 00:03:33,421 - madqn - DEBUG - trainer.py:150 - iter 1 ep 11/20 R=14.0 step=-249.0 approach=263.0 comm=0.0 -log10BER=19.49 eps=0.284
+2026-04-22 00:03:35,008 - madqn - DEBUG - trainer.py:150 - iter 1 ep 12/20 R=-3.0 step=-274.0 approach=271.0 comm=0.0 -log10BER=19.78 eps=0.270
+2026-04-22 00:03:37,851 - madqn - DEBUG - trainer.py:150 - iter 1 ep 13/20 R=-59.0 step=-367.0 approach=308.0 comm=0.0 -log10BER=19.83 eps=0.257
+2026-04-22 00:03:39,268 - madqn - DEBUG - trainer.py:150 - iter 1 ep 14/20 R=-10.0 step=-262.0 approach=252.0 comm=0.0 -log10BER=19.57 eps=0.244
+2026-04-22 00:03:49,895 - madqn - DEBUG - trainer.py:150 - iter 1 ep 15/20 R=-511.0 step=-951.0 approach=440.0 comm=0.0 -log10BER=19.93 eps=0.232
+2026-04-22 00:03:51,333 - madqn - DEBUG - trainer.py:150 - iter 1 ep 16/20 R=19.0 step=-226.0 approach=245.0 comm=0.0 -log10BER=19.69 eps=0.220
+2026-04-22 00:03:52,600 - madqn - DEBUG - trainer.py:150 - iter 1 ep 17/20 R=45.0 step=-194.0 approach=239.0 comm=0.0 -log10BER=19.41 eps=0.209
+2026-04-22 00:03:53,964 - madqn - DEBUG - trainer.py:150 - iter 1 ep 18/20 R=48.0 step=-195.0 approach=243.0 comm=0.0 -log10BER=19.74 eps=0.199
+2026-04-22 00:03:55,284 - madqn - DEBUG - trainer.py:150 - iter 1 ep 19/20 R=33.0 step=-212.0 approach=245.0 comm=0.0 -log10BER=19.46 eps=0.189
+2026-04-22 00:03:56,844 - madqn - DEBUG - trainer.py:150 - iter 1 ep 20/20 R=26.0 step=-231.0 approach=257.0 comm=0.0 -log10BER=19.59 eps=0.179
+2026-04-22 00:03:56,844 - madqn - INFO - trainer.py:165 - MADQN training done: total_eps=20 avg_return=-117.75 last10_avg_return=-39.80

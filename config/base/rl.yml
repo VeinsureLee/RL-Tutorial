@@ -1,65 +1,65 @@
-description: "DQN / MADQN 训练与测试参数（对齐论文参数表）"
+description: "DQN / MADQN hyperparameters (ported from commit 3bede13 — empirically convergent)"
 
 algo:
   value: "madqn"
-  description: "算法选择：dqn 或 madqn"
+  description: "Algorithm: dqn or madqn"
 
 lr:
-  value: 1.0e-4
-  description: "学习率（论文 0.0001）"
+  value: 1.0e-3
+  description: "Learning rate (3bede13 = 1e-3; previous 1e-4 was too slow)"
 
 gamma:
-  value: 0.9
-  description: "折扣因子（论文 0.9）"
+  value: 0.99
+  description: "Discount factor (3bede13 = 0.99; effective horizon ~100 steps)"
 
 epsilon:
   value: 0.5
-  description: "初始探索率（从 0.5 衰减到 epsilon_min）"
+  description: "Initial exploration rate (reset at the start of each iteration)"
 
 epsilon_min:
-  value: 0.01
-  description: "最小探索率"
+  value: 0.1
+  description: "Minimum exploration rate"
 
 epsilon_decay:
-  value: 0.99
-  description: "探索率衰减系数（每 episode 乘以此值）"
+  value: 0.95
+  description: "Epsilon decay per episode"
 
 num_iterations:
   value: 5
-  description: "外层迭代数（每轮重置 epsilon，避免局部最优）"
+  description: "Outer iterations (epsilon resets each iter to escape local optima)"
 
 num_episodes:
   value: 50
-  description: "每个 iteration 内的 episode 数"
+  description: "Episodes per iteration"
 
 episode_length:
   value: 5000
-  description: "每个 episode 最大步数"
+  description: "Max steps per episode"
 
 batch_size:
-  value: 128
-  description: "采样批次（论文 D_0=128）"
-
-mini_batch_size:
-  value: 128
-  description: "小批量采样大小"
+  value: 64
+  description: "Minibatch size for Q update (3bede13 = 64)"
 
 hidden_dim:
   value: 128
-  description: "Q-网络隐藏层维度"
+  description: "Q-network hidden layer size"
 
 update_freq:
-  value: 100
-  description: "目标网络更新频率（论文 N_0=100）"
+  value: 10
+  description: "Target-network sync frequency (every N env steps; 3bede13 = 10)"
 
 replay_buffer_size:
   value: 50000
-  description: "经验池大小（论文 50000）"
+  description: "Replay buffer capacity"
+
+train_interval:
+  value: 1
+  description: "Gradient update frequency (every N env steps; 3bede13 = 1 = every step)"
 
 test_max_steps:
   value: 500
-  description: "测试时最大步数"
+  description: "Max steps at test time"
 
 model_dir:
   value: "models"
-  description: "模型保存/加载目录"
+  description: "Directory for .pth checkpoints"
