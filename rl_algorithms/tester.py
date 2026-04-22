@@ -8,11 +8,11 @@ import matplotlib
 matplotlib.rcParams["axes.unicode_minus"] = False
 import matplotlib.pyplot as plt
 
-from rl_algorithms.algorithms import MADQN
+from rl_algorithms.algorithms import MADQN, QMIX
 
 
 def _take_all_actions(env, model, states):
-    if isinstance(model, MADQN):
+    if isinstance(model, (MADQN, QMIX)):
         return model.take_action(states, training=False)
     actions = [int(np.random.randint(env.n_actions)) for _ in range(env.num_agents)]
     actions[model.agent_id] = model.take_action(states[model.agent_id], training=False)
