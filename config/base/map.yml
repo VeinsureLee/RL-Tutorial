@@ -1,16 +1,16 @@
 description: "Map size and forbidden-square generation (ported from commit 3bede13)"
 
 map_size:
-  value: [48, 24]
-  description: "Grid size (rows, cols). 3bede13 uses 48x24 (physical 19.2m x 9.6m at grid=0.4m)."
+  value: [120, 60]
+  description: "Grid size (rows, cols). Paper-aligned: physical 48m x 24m at grid=0.4m."
 
 antenna_position:
-  value: [24, 12]
-  description: "Antenna (x, y) grid coord, center of map in 3bede13"
+  value: [60, 30]
+  description: "Antenna (x, y) grid coord, center of 120x60 map (physical 24m, 12m)."
 
 number_of_robots:
-  value: 8
-  description: "Number of robots/agents (3bede13 trained MADQN with 8 agents)"
+  value: 4
+  description: "Number of robots/agents. Currently set for QMIX scan."
 
 num_forbidden_squares:
   value: 5
