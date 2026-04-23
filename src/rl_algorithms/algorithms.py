@@ -1,9 +1,11 @@
 """
-DQN / MADQN / QMIX 算法：统一 take_action / update / save / load 接口。
+DQN / MADQN / JointMADQN / QMIX 算法：统一 take_action / update / save / load 接口。
 
-DQN  : 单 agent 学习，指定 agent_id；其他 agent 训练/测试时走随机策略（在 trainer 内拼接）。
-MADQN: Independent DQN，每个 agent 独立 Q 网络、目标网络、回放缓冲。
-QMIX : N 个 Qnet + 单调 mixer，联合 TD target 训练；执行时分布式（各用自己的 Q_i）。
+DQN       : 单 agent 学习，指定 agent_id；其他 agent 训练/测试时走随机策略（在 trainer 内拼接）。
+MADQN     : Independent DQN，每个 agent 独立 Q 网络、目标网络、回放缓冲。
+JointMADQN: 参数共享 MADQN，所有 agent 共用一套 Q / target / optimizer；相当于
+            Independent 的"硬参数共享"版本，适合同构 agent，模型参数量 = MADQN / N。
+QMIX      : N 个 Qnet + 单调 mixer，联合 TD target 训练；执行时分布式（各用自己的 Q_i）。
 """
 import os
 import numpy as np
@@ -213,6 +215,93 @@ class MADQN:
         self.epsilon = ckpt.get("epsilon", self.epsilon)
 
 
+class JointMADQN(MADQN):
+    """
+    参数共享 MADQN（Joint MADQN）：所有 agent **共用同一套 Q 网络 / 目标网络 / 优化器**，
+    但每 agent 保留独立 replay buffer。
+
+    与 Independent MADQN 的区别：
+        - Independent : N 个独立 Qnet，参数量 = N × single
+        - Joint       : 1 个共享 Qnet，参数量 = single
+
+    设计取舍：
+        - 同构 agent（动作空间 / 奖励结构一致）时，共享参数 = 隐式数据增强，样本效率高
+        - 不同 agent 若应有不同技能偏好，共享会互相干扰
+        - 本项目所有 agent 任务同构（到达自己的 target），适合参数共享
+
+    实现思路：
+        继承 MADQN，重写 __init__ 把 self.q_nets / self.target_q_nets / self.optimizers
+        这三个 list 的所有元素指向**同一对象**。父类的 take_action / update 逻辑不用改。
+        update_target_qnet / save / load 需要重写，避免对共享对象做 N 次相同操作。
+
+    样例状态：本类仅提供接口骨架，暂未单独做收敛性调优，调试时留意：
+        - 一次 train_interval 内 trainer 会对每个 agent 的 buffer 独立采样 + 调用一次
+          self.update(i, batch)，因此共享网络每步其实做了 N 次梯度步（Independent 则
+          各网络各自 1 次）。
+        - 若需要进一步对齐到"每步 1 次联合梯度步"，可在 trainer 里给 JointMADQN 加一
+          条单独分支，把 N 个 buffer 的 batch 拼起来做一次反传。
+    """
+
+    def __init__(self, env,
+                 lr: float = 1e-4, gamma: float = 0.9,
+                 epsilon: float = 0.5, epsilon_min: float = 0.01, epsilon_decay: float = 0.99,
+                 hidden_dim: int = 128, update_freq: int = 100,
+                 replay_buffer_size: int = 50000,
+                 device: torch.device = torch.device("cpu")):
+        # 不调用 super().__init__ —— 父类会创建 N 套独立网络
+        self.env = env
+        self.num_agents = env.num_agents
+        self.n_actions = env.n_actions
+        self.n_powers = env.n_powers
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.device = device
+        self.update_freq = update_freq
+
+        # 单一共享网络
+        shared_q = _build_qnet(env, hidden_dim).to(device)
+        shared_t = _build_qnet(env, hidden_dim).to(device)
+        shared_t.load_state_dict(shared_q.state_dict())
+        shared_t.eval()
+        shared_opt = optim.Adam(shared_q.parameters(), lr=lr)
+
+        # 让 list 所有位置都指向同一对象，MADQN.take_action / update 无需改动
+        self.q_nets = [shared_q] * self.num_agents
+        self.target_q_nets = [shared_t] * self.num_agents
+        self.optimizers = [shared_opt] * self.num_agents
+        self.buffers = [ReplayBuffer(replay_buffer_size) for _ in range(self.num_agents)]
+
+        self.loss_fn = nn.MSELoss()
+        self.batch_size = 128
+
+        # 单独保留引用，save/load 用
+        self._shared_qnet = shared_q
+        self._shared_target = shared_t
+        self._shared_optimizer = shared_opt
+
+    def update_target_qnet(self, agent_id: int = 0):
+        """共享网络，忽略 agent_id，只同步一次。"""
+        self._shared_target.load_state_dict(self._shared_qnet.state_dict())
+
+    def save(self, path: str):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save({
+            "qnet": self._shared_qnet.state_dict(),
+            "target_qnet": self._shared_target.state_dict(),
+            "optimizer": self._shared_optimizer.state_dict(),
+            "epsilon": self.epsilon,
+        }, path)
+
+    def load(self, path: str):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Model file not found: {path}")
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
+        self._shared_qnet.load_state_dict(ckpt["qnet"])
+        self._shared_target.load_state_dict(ckpt.get("target_qnet", ckpt["qnet"]))
+        self._shared_optimizer.load_state_dict(ckpt["optimizer"])
+        self.epsilon = ckpt.get("epsilon", self.epsilon)
 
 
 class QMIX:

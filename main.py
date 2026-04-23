@@ -33,14 +33,17 @@ import torch
 
 from env.env import MultiRobotEnv
 from config.yml_config import get_env_config, get_rl_config
-from rl_algorithms import DQN, MADQN, QMIX, train, test, plot_training
+from rl_algorithms import DQN, MADQN, JointMADQN, QMIX, train, test, plot_training
 from utils.logger_handler import get_logger
 from utils.run_manager import RunContext
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / QMIX)")
-    p.add_argument("--model", choices=["dqn", "madqn", "qmix"], default="madqn", help="algorithm")
+    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / JointMADQN / QMIX)")
+    p.add_argument("--model",
+                   choices=["dqn", "madqn", "joint_madqn", "qmix"],
+                   default="madqn",
+                   help="algorithm: dqn | madqn (independent) | joint_madqn (parameter sharing) | qmix")
     p.add_argument("--mode", choices=["train", "test"], default="train", help="mode")
 
     # 训练超参（命令行覆盖 rl.yml）
@@ -99,6 +102,8 @@ def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int 
         return DQN(env, agent_id=agent_id, **common)
     if algo == "qmix":
         return QMIX(env, **common)
+    if algo == "joint_madqn":
+        return JointMADQN(env, **common)
     return MADQN(env, **common)
 
 
