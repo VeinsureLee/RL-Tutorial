@@ -24,3 +24,37 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
+
+
+class JointReplayBuffer:
+    """
+    N-agent 联合 transition 存储：每条 = (states[N], actions[N], rewards[N], next_states[N], dones[N])。
+    采样返回 (B, N) 形状的 batch，供 QMIX 联合 TD 更新使用。
+    """
+
+    def __init__(self, capacity: int = 50000):
+        self.buffer = collections.deque(maxlen=capacity)
+
+    def add(self, states, actions, rewards, next_states, dones):
+        """输入是长度 N 的 list/array（每项对应一个 agent）。"""
+        self.buffer.append((
+            np.asarray(states, dtype=np.int64),
+            np.asarray(actions, dtype=np.int64),
+            np.asarray(rewards, dtype=np.float32),
+            np.asarray(next_states, dtype=np.int64),
+            np.asarray(dones, dtype=np.float32),
+        ))
+
+    def sample(self, batch_size: int):
+        batch = random.sample(self.buffer, min(batch_size, len(self.buffer)))
+        states, actions, rewards, next_states, dones = zip(*batch)
+        return (
+            np.stack(states),        # (B, N) int
+            np.stack(actions),       # (B, N) int
+            np.stack(rewards),       # (B, N) float
+            np.stack(next_states),   # (B, N) int
+            np.stack(dones),         # (B, N) float
+        )
+
+    def __len__(self):
+        return len(self.buffer)
