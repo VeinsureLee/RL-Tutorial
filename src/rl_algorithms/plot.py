@@ -52,11 +52,17 @@ def _plot_metric(values, agent_values, title_total, title_agents,
     return out_path
 
 
-def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "MADQN") -> list:
+def _fname(fig_dir: str, prefix: str, base: str) -> str:
+    """prefix 为空时直接用 base 名；否则拼 ``<prefix>_<base>``。"""
+    fname = f"{prefix}_{base}" if prefix else base
+    return os.path.join(fig_dir, fname)
+
+
+def plot_training(history: dict, fig_dir: str, prefix: str = "", algo_label: str = "MADQN") -> list:
     """
     :param history: trainer.train() 返回的 dict
-    :param fig_dir: 输出目录（通常 rl_algorithms/plot/figs）
-    :param prefix : 文件名前缀，如 "madqn_4agents"
+    :param fig_dir: 输出目录（通常是 ``<run.dir>/figs/``）
+    :param prefix : 文件名前缀；空字符串时直接落盘为 ``return.png`` 等
     :param algo_label: 图标题前缀，显示算法名
     """
     _ensure_dir(fig_dir)
@@ -67,7 +73,7 @@ def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "M
         title_total=f"{algo_label} Total Return vs Episode",
         title_agents=f"{algo_label} Per-Agent Return vs Episode",
         ylabel="Return",
-        out_path=os.path.join(fig_dir, f"{prefix}_return.png"),
+        out_path=_fname(fig_dir, prefix, "return.png"),
     ))
 
     paths.append(_plot_metric(
@@ -75,7 +81,7 @@ def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "M
         title_total=f"{algo_label} Step Reward (time penalty) vs Episode",
         title_agents=f"{algo_label} Per-Agent Step Reward vs Episode",
         ylabel="Step Reward",
-        out_path=os.path.join(fig_dir, f"{prefix}_step_reward.png"),
+        out_path=_fname(fig_dir, prefix, "step_reward.png"),
         highlight_max=False,
     ))
 
@@ -84,7 +90,7 @@ def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "M
         title_total=f"{algo_label} Approach Reward vs Episode",
         title_agents=f"{algo_label} Per-Agent Approach Reward vs Episode",
         ylabel="Approach Reward",
-        out_path=os.path.join(fig_dir, f"{prefix}_approach_reward.png"),
+        out_path=_fname(fig_dir, prefix, "approach_reward.png"),
     ))
 
     paths.append(_plot_metric(
@@ -92,7 +98,7 @@ def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "M
         title_total=f"{algo_label} Communication (BER) Reward vs Episode",
         title_agents=f"{algo_label} Per-Agent Communication Reward vs Episode",
         ylabel="BER Reward",
-        out_path=os.path.join(fig_dir, f"{prefix}_ber_reward.png"),
+        out_path=_fname(fig_dir, prefix, "ber_reward.png"),
     ))
 
     paths.append(_plot_metric(
@@ -100,7 +106,7 @@ def plot_training(history: dict, fig_dir: str, prefix: str, algo_label: str = "M
         title_total=f"{algo_label} Mean(-log10 BER) vs Episode",
         title_agents=f"{algo_label} Per-Agent Mean(-log10 BER) vs Episode",
         ylabel="-log10(BER)",
-        out_path=os.path.join(fig_dir, f"{prefix}_ber.png"),
+        out_path=_fname(fig_dir, prefix, "ber.png"),
     ))
 
     return paths

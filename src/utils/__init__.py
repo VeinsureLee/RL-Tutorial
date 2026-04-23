@@ -1,5 +1,5 @@
 """
-工具包：日志、yml 配置加载/保存、路径与参数打印。
+工具包：日志、yml 配置加载/保存、路径管理、run 目录管理。
 """
 from utils.logger_handler import get_logger, get_file_only_logger
 from utils.config_handler import (
@@ -13,6 +13,7 @@ from utils.config_handler import (
     print_params_settings,
 )
 from utils.path_tool import get_root_path, get_abs_path
+from utils.run_manager import RunContext
 
 __all__ = [
     "get_logger",
@@ -27,4 +28,5 @@ __all__ = [
     "print_params_settings",
     "get_root_path",
     "get_abs_path",
+    "RunContext",
 ]

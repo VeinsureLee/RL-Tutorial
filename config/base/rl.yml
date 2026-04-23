@@ -5,8 +5,8 @@ algo:
   description: "Algorithm: dqn or madqn"
 
 lr:
-  value: 1.0e-3
-  description: "Learning rate (3bede13 = 1e-3; previous 1e-4 was too slow)"
+  value: 1.0e-4
+  description: "Learning rate (matching agent_scan_goal50_lr1e-4: lowered from 1e-3 to stabilize larger N)"
 
 gamma:
   value: 0.99
@@ -17,16 +17,16 @@ epsilon:
   description: "Initial exploration rate (reset at the start of each iteration)"
 
 epsilon_min:
-  value: 0.1
-  description: "Minimum exploration rate"
+  value: 0.05
+  description: "Minimum exploration rate (matching agent_scan_goal50_lr1e-4)"
 
 epsilon_decay:
   value: 0.95
   description: "Epsilon decay per episode"
 
 num_iterations:
-  value: 5
-  description: "Outer iterations (epsilon resets each iter to escape local optima)"
+  value: 1
+  description: "Outer iterations (matching agent_scan_goal50_lr1e-4: 1 iter x 50 ep)"
 
 num_episodes:
   value: 50

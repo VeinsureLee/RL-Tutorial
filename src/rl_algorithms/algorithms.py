@@ -149,43 +149,23 @@ class MADQN:
 
     def take_action(self, states, training: bool = True):
         """
-        对每 agent epsilon-greedy 选动作；对方向分量做冲突规避：
-        若下一格已被其它 agent 选或是禁区，则按 Q 排序尝试替代动作。
+        Independent 版：每 agent 完全独立 epsilon-greedy，直接返回 Q argmax（或随机），
+        不做任何 agent 间冲突规避。碰撞 / 禁区 / 越界交由 env.step 处理。
         """
         actions = []
-        occupied = set()
-        directions = self.env.directions
         for i in range(self.num_agents):
             if self.env.done_flags is not None and self.env.done_flags[i]:
                 actions.append(0)
+                continue
+            if training and np.random.random() < self.epsilon:
+                actions.append(int(np.random.randint(self.n_actions)))
                 continue
             target_idx = self.env.pos_to_index(*self.env.target_states[i])
             s = torch.tensor([states[i]], dtype=torch.long, device=self.device)
             t = torch.tensor([target_idx], dtype=torch.long, device=self.device)
             with torch.no_grad():
                 q = self.q_nets[i](s, t)
-            if training and np.random.random() < self.epsilon:
-                action = int(np.random.randint(self.n_actions))
-            else:
-                action = int(q.argmax(dim=1).item())
-
-            dr, dc = directions[self._decode_dir(action)]
-            cur_r, cur_c = self.env.positions[i]
-            new_r = int(cur_r + dr)
-            new_c = int(cur_c + dc)
-            if (new_r, new_c) in occupied or (new_r, new_c) in self.env.forbidden_set:
-                sorted_actions = q.argsort(dim=1, descending=True).squeeze().tolist()
-                if isinstance(sorted_actions, int):
-                    sorted_actions = [sorted_actions]
-                for alt in sorted_actions:
-                    dr2, dc2 = directions[self._decode_dir(alt)]
-                    nr2 = int(cur_r + dr2)
-                    nc2 = int(cur_c + dc2)
-                    if (nr2, nc2) not in occupied and (nr2, nc2) not in self.env.forbidden_set:
-                        action, new_r, new_c = alt, nr2, nc2
-                        break
-            occupied.add((new_r, new_c))
-            actions.append(action)
+            actions.append(int(q.argmax(dim=1).item()))
         return actions
 
     def update(self, agent_id: int, batch) -> float:

@@ -52,16 +52,22 @@ def _run_episode(env, model, max_steps: int):
     return False, max_steps, total, step_sum, approach_sum, comm_sum, neglog_ber_all, frames
 
 
-def test(env, model, max_steps: int,
-         save_dir: str, prefix: str, gif_fps: int = 5) -> dict:
+def test(env, model, *, max_steps: int, out_dir: str, gif_fps: int = 5) -> dict:
     """
-    运行一个测试 episode 并保存 nav/signal 的 PNG + GIF。
-    :return: dict(success, steps, total_reward, step_reward, approach_reward,
-                   comm_reward, mean_neg_log_ber, artifacts)
+    跑一个测试 episode 并把所有产物写到 ``out_dir``（通常是 ``<run.dir>/test/``）。
+
+    落盘文件名（无 prefix，每次 run 自有目录不会冲突）::
+        out_dir/nav.gif
+        out_dir/signal.gif
+        out_dir/nav.png
+        out_dir/signal.png
     """
     print("=" * 50)
-    print(f"Testing {prefix} (agents={env.num_agents}, max_steps={max_steps})")
+    print(f"Testing agents={env.num_agents}, max_steps={max_steps}")
+    print(f"out_dir={out_dir}")
     print("=" * 50)
+
+    os.makedirs(out_dir, exist_ok=True)
 
     t0 = time.time()
     success, steps, total, step_sum, appr, comm, neglog_list, frames = _run_episode(env, model, max_steps)
@@ -76,26 +82,19 @@ def test(env, model, max_steps: int,
         print(f"mean(-log10 BER)={np.mean(neglog_list):.2f}")
     print(f"elapsed={elapsed:.2f}s")
 
-    gif_dir = os.path.join(save_dir, "gif")
-    png_dir = os.path.join(save_dir, "png")
-    os.makedirs(gif_dir, exist_ok=True)
-    os.makedirs(png_dir, exist_ok=True)
     artifacts = {}
 
-    # 导航 GIF
-    nav_gif = os.path.join(gif_dir, f"{prefix}_nav.gif")
+    nav_gif = os.path.join(out_dir, "nav.gif")
     env.save_nav_gif(nav_gif, frames, fps=gif_fps)
     artifacts["nav_gif"] = nav_gif
     print(f"saved: {nav_gif}")
 
-    # 信号 GIF
-    sig_gif = os.path.join(gif_dir, f"{prefix}_signal.gif")
+    sig_gif = os.path.join(out_dir, "signal.gif")
     env.save_signal_gif(sig_gif, frames, fps=gif_fps)
     artifacts["signal_gif"] = sig_gif
     print(f"saved: {sig_gif}")
 
-    # 导航 PNG
-    nav_png = os.path.join(png_dir, f"{prefix}_nav.png")
+    nav_png = os.path.join(out_dir, "nav.png")
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
     env.render_nav_frame(ax)
     fig.savefig(nav_png, dpi=150, bbox_inches='tight')
@@ -103,8 +102,7 @@ def test(env, model, max_steps: int,
     artifacts["nav_png"] = nav_png
     print(f"saved: {nav_png}")
 
-    # 信号 PNG
-    sig_png = os.path.join(png_dir, f"{prefix}_signal.png")
+    sig_png = os.path.join(out_dir, "signal.png")
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
     env.render_signal_frame(ax)
     fig.savefig(sig_png, dpi=150, bbox_inches='tight')
