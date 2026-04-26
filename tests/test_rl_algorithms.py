@@ -83,7 +83,7 @@ def test_qnet_forward_shape(env_cfg):
     """Qnet 对单个状态能输出 (batch, n_actions) 形状。"""
     import torch
     from env.env import MultiRobotEnv
-    from rl_algorithms.qnet import Qnet
+    from rl_algorithms.qnet_dqn import Qnet
 
     env = MultiRobotEnv(env_cfg)
     net = Qnet(
@@ -109,7 +109,7 @@ def test_random_policy_train_pipeline(env_cfg, tmp_path, monkeypatch):
     """随机策略走完 trainer 流水线：history 字段齐全 + 数值有限 + 图与 CSV 落盘。"""
     import torch
     from env.env import MultiRobotEnv
-    from rl_algorithms.algorithms import MADQN
+    from rl_algorithms.madqn import MADQN
     from rl_algorithms.trainer import train
     from rl_algorithms.plot import plot_training
     from utils import run_manager

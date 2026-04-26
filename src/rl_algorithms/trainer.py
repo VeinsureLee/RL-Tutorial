@@ -11,7 +11,9 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-from rl_algorithms.algorithms import DQN, MADQN, QMIX
+from rl_algorithms.dqn import DQN
+from rl_algorithms.madqn import MADQN
+from rl_algorithms.qmix import QMIX
 
 
 def _take_all_actions(env, model, states, training: bool):

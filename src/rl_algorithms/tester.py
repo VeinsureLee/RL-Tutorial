@@ -8,7 +8,8 @@ import matplotlib
 matplotlib.rcParams["axes.unicode_minus"] = False
 import matplotlib.pyplot as plt
 
-from rl_algorithms.algorithms import MADQN, QMIX
+from rl_algorithms.madqn import MADQN
+from rl_algorithms.qmix import QMIX
 
 
 def _take_all_actions(env, model, states):

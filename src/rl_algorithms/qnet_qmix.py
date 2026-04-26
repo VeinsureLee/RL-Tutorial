@@ -1,14 +1,18 @@
 """
-Q 网络：输入 (state_idx, target_idx)，输出各复合动作的 Q 值。
-主干分三支：当前位置 embedding、目标位置 embedding、相对位置特征，拼接后经 MLP 输出。
+QMIX 专用 individual Q 网络（Q_i）。
+
+每个 agent 一份 Q_i，外层由 Mixer 组合成 Q_tot。架构与其它算法一致：
+state/target embedding + 8 维相对位置特征 -> MLP -> 各复合动作 Q。
+
+保留独立文件方便给 QMIX 单独尝试 RNN / GRU 输入或循环 Q（处理 POMDP 时常见
+的修改），不会牵连 DQN / MADQN / JointMADQN。
 """
-import numpy as np
 import torch
 import torch.nn as nn
 
 
 def _relative_features(state_idx: torch.Tensor, target_idx: torch.Tensor,
-                       rows: int, cols: int):
+                       rows: int, cols: int) -> torch.Tensor:
     """由 state_idx 与 target_idx 批量计算 8 维相对位置特征 (B, 8)。"""
     sx = state_idx // cols
     sy = state_idx % cols
@@ -26,9 +30,7 @@ def _relative_features(state_idx: torch.Tensor, target_idx: torch.Tensor,
 
 
 class Qnet(nn.Module):
-    """
-    Q(s, a | target)：state/target embedding + 相对位置特征 -> MLP -> 各动作 Q。
-    """
+    """QMIX 中每 agent 的个体 Q_i：state/target embedding + 相对位置特征 -> MLP。"""
 
     def __init__(self, state_num: int, action_dim: int, rows: int, cols: int,
                  embedding_dim: int = 64, hidden_dim: int = 128):
@@ -48,7 +50,7 @@ class Qnet(nn.Module):
             nn.Linear(hidden_dim, action_dim),
         )
 
-    def forward(self, state_idx: torch.Tensor, target_idx: torch.Tensor):
+    def forward(self, state_idx: torch.Tensor, target_idx: torch.Tensor) -> torch.Tensor:
         h_abs = self.abs_fc(self.embedding(state_idx))
         h_tgt = self.target_fc(self.embedding(target_idx))
         h_rel = self.rel_fc(_relative_features(state_idx, target_idx, self.rows, self.cols))
