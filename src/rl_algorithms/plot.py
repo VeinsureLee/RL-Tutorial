@@ -1,13 +1,20 @@
 """
-训练曲线绘图：5 张图，1x2 布局（左：全局/总和；右：每 agent）。
-与历史格式保持一致：总和曲线叠加红色虚线与最大值标注。
+训练曲线绘图：7 张图。
 
-输出：
+6 张 1x2 布局（左：全局/总和，叠 max 虚线；右：每 agent）：
     {prefix}_return.png         # 整体 return
     {prefix}_step_reward.png    # 时间惩罚累计
-    {prefix}_approach_reward.png# 接近目标奖励累计
+    {prefix}_approach_reward.png# 接近目标奖励累计（含 closer/farther/same/goal/forbidden）
+    {prefix}_path_reward.png    # step + approach 之和；理想最短路径下趋向 +reward_goal
     {prefix}_ber_reward.png     # 通信奖励累计
     {prefix}_ber.png            # 每 ep 的 mean(-log10 BER)
+
+1 张单图（无 per-agent 拆分，因为 wall-clock 是全局指标）：
+    {prefix}_time.png           # 每 ep 的 wall-clock 耗时（秒）
+
+注意：path_reward 是 step_return + approach_return 的逐元素和。approach 里仍混着 goal(+50)
+和 forbidden(-5)，所以这条曲线**不是纯路径长度估计**：撞禁区会下拉、到达 goal 会上拉
+reward_goal。要得到完全纯净的"step + closer"信号，需要 env.step 拆出第 4 路 reward。
 """
 import os
 import matplotlib
@@ -58,6 +65,29 @@ def _fname(fig_dir: str, prefix: str, base: str) -> str:
     return os.path.join(fig_dir, fname)
 
 
+def _plot_single(values, title, ylabel, out_path,
+                 highlight_max: bool = False, highlight_min: bool = False) -> str:
+    """单面板绘图：x = Episode，y = values。Time-Ep 这种"全局标量"用此布局。"""
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    episodes = range(1, len(values) + 1)
+    ax.plot(episodes, values, linewidth=2, label="Per-episode")
+    if highlight_max and values:
+        vmax = max(values)
+        ax.axhline(y=vmax, color='r', linestyle='--', label=f"Max: {vmax:.2f}")
+    if highlight_min and values:
+        vmin = min(values)
+        ax.axhline(y=vmin, color='g', linestyle='--', label=f"Min: {vmin:.2f}")
+    ax.set_xlabel(f"Episode (total: {len(values)})")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best')
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    return out_path
+
+
 def plot_training(history: dict, fig_dir: str, prefix: str = "", algo_label: str = "MADQN") -> list:
     """
     :param history: trainer.train() 返回的 dict
@@ -93,6 +123,26 @@ def plot_training(history: dict, fig_dir: str, prefix: str = "", algo_label: str
         out_path=_fname(fig_dir, prefix, "approach_reward.png"),
     ))
 
+    # step + approach 合成：trainer 输出的两路 reward 逐元素相加。
+    # 理想最短路径下每步 step+closer = -1 + 1 = 0，到达 goal 一次性 +reward_goal，
+    # 所以 ep 总和 ≈ +reward_goal（默认 50）。撞禁区 / goal 会让这条曲线偏离纯路径估计。
+    step_total = history["step_return_list"]
+    approach_total = history["approach_return_list"]
+    path_total = [s + a for s, a in zip(step_total, approach_total)]
+    agent_step = history["agent_step_return_lists"]
+    agent_approach = history["agent_approach_return_lists"]
+    agent_path = [
+        [s + a for s, a in zip(agent_step[i], agent_approach[i])]
+        for i in range(len(agent_step))
+    ]
+    paths.append(_plot_metric(
+        path_total, agent_path,
+        title_total=f"{algo_label} Step + Approach Reward vs Episode",
+        title_agents=f"{algo_label} Per-Agent Step + Approach Reward vs Episode",
+        ylabel="Step + Approach",
+        out_path=_fname(fig_dir, prefix, "path_reward.png"),
+    ))
+
     paths.append(_plot_metric(
         history["comm_return_list"], history["agent_comm_return_lists"],
         title_total=f"{algo_label} Communication (BER) Reward vs Episode",
@@ -108,5 +158,17 @@ def plot_training(history: dict, fig_dir: str, prefix: str = "", algo_label: str
         ylabel="-log10(BER)",
         out_path=_fname(fig_dir, prefix, "ber.png"),
     ))
+
+    # Time-Ep：单图。time_list 缺失时跳过，向后兼容旧 history dict。
+    time_values = history.get("time_list") or []
+    if time_values:
+        paths.append(_plot_single(
+            time_values,
+            title=f"{algo_label} Wall-Clock Time per Episode",
+            ylabel="Time (s)",
+            out_path=_fname(fig_dir, prefix, "time.png"),
+            highlight_max=True,
+            highlight_min=True,
+        ))
 
     return paths

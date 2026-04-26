@@ -166,6 +166,7 @@ class RunContext:
         approach = list(history.get("approach_return_list", []))
         comm = list(history.get("comm_return_list", []))
         ber = list(history.get("ber_list", []))
+        ep_time = list(history.get("time_list", []))
 
         agent_ret = history.get("agent_return_lists", [])
         agent_step = history.get("agent_step_return_lists", [])
@@ -175,7 +176,8 @@ class RunContext:
         num_agents = len(agent_ret)
 
         n = len(ret)
-        header = ["episode", "return", "step_return", "approach_return", "comm_return", "neg_log_ber_mean"]
+        header = ["episode", "return", "step_return", "approach_return", "comm_return",
+                  "neg_log_ber_mean", "time_sec"]
         for i in range(num_agents):
             header.extend([
                 f"agent{i}_return",
@@ -199,6 +201,7 @@ class RunContext:
                     _safe(approach, ep),
                     _safe(comm, ep),
                     _safe(ber, ep),
+                    _safe(ep_time, ep),
                 ]
                 for i in range(num_agents):
                     row.extend([
