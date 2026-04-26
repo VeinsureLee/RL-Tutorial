@@ -1,5 +1,5 @@
 """
-JointMADQN (参数共享 MADQN) 专用 Q 网络。
+SharedMADQN (参数共享 MADQN) 专用 Q 网络。
 
 所有 agent **共用同一份** Qnet 实例（参数共享 / 硬权值绑定），只在 agent 维度
 上"复用"前向。架构本身与 DQN/MADQN 一致：state/target embedding + 8 维相对

@@ -15,9 +15,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from rl_algorithms.qnet_qmix import Qnet
+from rl_algorithms.qmix.qnet import Qnet
 from rl_algorithms.replay import JointReplayBuffer
-from rl_algorithms.mixer import Mixer
+from rl_algorithms.qmix.mixer import Mixer
 
 
 def _build_qnet(env, hidden_dim: int) -> Qnet:

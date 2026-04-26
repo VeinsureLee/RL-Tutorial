@@ -33,18 +33,18 @@ import torch
 
 from env.env import MultiRobotEnv
 from config.yml_config import get_env_config, get_rl_config
-from rl_algorithms import DQN, MADQN, JointMADQN, QMIX, train, test, plot_training
+from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, train, test, plot_training
 from utils.logger_handler import get_logger
 from utils.run_manager import RunContext
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / JointMADQN / QMIX)")
+    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / SharedMADQN / QMIX)")
     p.add_argument("--model",
-                   choices=["dqn", "madqn", "joint_madqn", "qmix"],
-                   default="madqn",
-                   help="algorithm: dqn | madqn (independent) | joint_madqn (parameter sharing) | qmix")
-    p.add_argument("--mode", choices=["train", "test"], default="train", help="mode")
+                   choices=["dqn", "madqn", "shared_madqn", "qmix"],
+                   default="shared_madqn",
+                   help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix")
+    p.add_argument("--mode", choices=["train", "test"], default="test", help="mode")
 
     # 训练超参（命令行覆盖 rl.yml）
     p.add_argument("--lr", type=float, default=None)
@@ -76,6 +76,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no_plot", action="store_true")
     p.add_argument("--no_test_after_train", action="store_true",
                    help="skip the auto test episode at the end of training")
+    p.add_argument("--randomize_reset", choices=["auto", "true", "false"], default="auto",
+                   help="resample (start, target) every env.reset(); "
+                        "auto=true for shared_madqn / false otherwise (default), "
+                        "true/false to override")
     return p.parse_args()
 
 
@@ -102,8 +106,8 @@ def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int 
         return DQN(env, agent_id=agent_id, **common)
     if algo == "qmix":
         return QMIX(env, **common)
-    if algo == "joint_madqn":
-        return JointMADQN(env, **common)
+    if algo == "shared_madqn":
+        return SharedMADQN(env, **common)
     return MADQN(env, **common)
 
 
@@ -235,7 +239,15 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env_cfg = get_env_config()
-    env = MultiRobotEnv(env_cfg)
+    # reset 起终点是否随机化：
+    #   - auto（默认）：仅 shared_madqn 开启，其它算法保持 scenario.npz 固定起终点
+    #   - true / false：用户手动覆盖（调试用）
+    if args.randomize_reset == "auto":
+        randomize = (args.model == "shared_madqn")
+    else:
+        randomize = (args.randomize_reset == "true")
+    print(f"[env] randomize_on_reset = {randomize} ({'auto' if args.randomize_reset == 'auto' else 'override'})")
+    env = MultiRobotEnv(env_cfg, randomize_on_reset=randomize)
 
     if args.mode == "train":
         _run_train(args, cfg, env, device, env_cfg)

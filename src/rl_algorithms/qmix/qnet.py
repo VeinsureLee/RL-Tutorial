@@ -1,11 +1,11 @@
 """
-DQN 专用 Q 网络。
+QMIX 专用 individual Q 网络（Q_i）。
 
-输入 (state_idx, target_idx)，输出各复合动作的 Q 值。主干分三支：
-当前位置 embedding、目标位置 embedding、相对位置特征 (8 维)，拼接后经 MLP 输出。
+每个 agent 一份 Q_i，外层由 Mixer 组合成 Q_tot。架构与其它算法一致：
+state/target embedding + 8 维相对位置特征 -> MLP -> 各复合动作 Q。
 
-与其它算法共用同一架构，但保留独立文件以便按算法自由微调（例如换 embedding
-维度、加 dueling head 等），不会影响 MADQN / JointMADQN / QMIX。
+保留独立文件方便给 QMIX 单独尝试 RNN / GRU 输入或循环 Q（处理 POMDP 时常见
+的修改），不会牵连 DQN / MADQN / SharedMADQN。
 """
 import torch
 import torch.nn as nn
@@ -30,7 +30,7 @@ def _relative_features(state_idx: torch.Tensor, target_idx: torch.Tensor,
 
 
 class Qnet(nn.Module):
-    """Q(s, a | target)：state/target embedding + 相对位置特征 -> MLP -> 各动作 Q。"""
+    """QMIX 中每 agent 的个体 Q_i：state/target embedding + 相对位置特征 -> MLP。"""
 
     def __init__(self, state_num: int, action_dim: int, rows: int, cols: int,
                  embedding_dim: int = 64, hidden_dim: int = 128):

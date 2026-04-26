@@ -32,7 +32,7 @@ class MultiRobotEnv:
     动作: 0 ~ (n_dirs * n_powers - 1) 的整数，解码为 (方向, 功率等级)
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, randomize_on_reset: bool = False):
         """
         :param config: dict，必须提供：
             map_size, grid_size, antenna_position,
@@ -44,6 +44,10 @@ class MultiRobotEnv:
             P_sum, num_power_levels,
             channel_block_length, packet_size, noise_power_mw,
             ber_reward_better, ber_reward_worse
+        :param randomize_on_reset: 若为 True，每次 reset 都从合法格子中重新采样
+            起点与终点（共 2N 个互不相同的格子，跳过禁区与天线格）。供
+            SharedMADQN 等需要泛化到任意 (start, target) 的算法使用；DQN /
+            Independent MADQN / QMIX 保持默认 False，行为不变。
         """
         # 地图尺寸
         self.map_size = tuple(int(x) for x in config["map_size"])
@@ -98,8 +102,27 @@ class MultiRobotEnv:
             sigma_rayleigh=config.get("sigma_rayleigh", 1.2),
         )
 
-        # 随机数生成器（Rayleigh 衰落用）
+        # 随机数生成器（Rayleigh 衰落 + 可选的 reset 随机化共用一个 rng）
         self.rng = np.random.default_rng(config.get("random_seed", 42))
+
+        # reset 随机化：若开启，预计算合法格子列表（一次性，避免每次 reset 重建）
+        self.randomize_on_reset = bool(randomize_on_reset)
+        self._antenna_cell = tuple(int(x) for x in config["antenna_position"])
+        if self.randomize_on_reset:
+            self._valid_cells = [
+                (r, c)
+                for r in range(self.rows)
+                for c in range(self.cols)
+                if (r, c) not in self.forbidden_set and (r, c) != self._antenna_cell
+            ]
+            if len(self._valid_cells) < 2 * self.num_agents:
+                raise ValueError(
+                    f"randomize_on_reset: not enough valid cells "
+                    f"({len(self._valid_cells)}) for {self.num_agents} agents "
+                    f"(need {2 * self.num_agents})"
+                )
+        else:
+            self._valid_cells = None
 
         # 运行时状态（reset 填充）
         self.positions = None
@@ -152,7 +175,20 @@ class MultiRobotEnv:
 
     # ---------------------------------------------------------------- 主循环
     def reset(self):
-        """重置环境，返回每 agent 的状态索引列表。"""
+        """重置环境，返回每 agent 的状态索引列表。
+
+        若 randomize_on_reset=True，则从合法格子中抽 2N 个互不相同的格子，前 N
+        作为本 episode 的起点、后 N 作为目的地，覆盖 self.start_states /
+        self.target_states。否则保持构造时从 scenario.npz 读入的固定 (start,
+        target)。
+        """
+        if self.randomize_on_reset:
+            picked_idx = self.rng.choice(
+                len(self._valid_cells), size=2 * self.num_agents, replace=False
+            )
+            picked = [self._valid_cells[int(i)] for i in picked_idx]
+            self.start_states = [tuple(int(x) for x in p) for p in picked[:self.num_agents]]
+            self.target_states = [tuple(int(x) for x in p) for p in picked[self.num_agents:]]
         self.positions = np.array(self.start_states, dtype=int)
         self.done_flags = np.zeros(self.num_agents, dtype=bool)
         self.trajectories = [[(int(r), int(c))] for r, c in self.positions]

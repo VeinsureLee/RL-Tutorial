@@ -5,7 +5,7 @@ MADQN (Independent DQN) 专用 Q 网络。
 state/target embedding + 8 维相对位置特征 -> MLP -> 各复合动作 Q。
 
 保留独立文件方便给 Independent 版本单独加观测增强（如邻居位置 one-hot）而
-不连带改 JointMADQN / QMIX。
+不连带改 SharedMADQN / QMIX。
 """
 import torch
 import torch.nn as nn

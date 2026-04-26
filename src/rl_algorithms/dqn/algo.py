@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from rl_algorithms.qnet_dqn import Qnet
+from rl_algorithms.dqn.qnet import Qnet
 from rl_algorithms.replay import ReplayBuffer
 
 
