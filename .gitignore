@@ -1,0 +1,62 @@
+.idea
+.cursor
+.claude
+
+# Python __pycache__
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python 其他常见文件
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual Environment
+.venv/
+.venv_dl
+venv/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 测试脚手架临时文件
+test.py
+models/
+
+# 参考资料（PDF 不入库）
+references/
+
+# 论文写作（含个人信息，整体不入库）
+paper/
+
+# 审批文件（含个人信息，整体不入库）
+reports/
+
+# 进度跟踪、待办（按个人习惯不入库）
+CLAUDE.md
+plans/
+todo/
+
+# 训练产物（每次 run 体量大，按需手动归档）
+experiments/runs/
+experiments/unit_tests/
+
+# 历史归档目录（部分含敏感原件，整体不入库；旧归档已入库的不动）
+archive/legacy_paper_tex/
+archive/legacy_plans/
+archive/legacy_logs/
+archive/legacy_results/
+archive/legacy_models/
+archive/legacy_experiments/
+
+# NPZ 缓存与快照
+*.npz
