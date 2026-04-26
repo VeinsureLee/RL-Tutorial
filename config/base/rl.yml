@@ -25,7 +25,7 @@ epsilon_decay:
   description: "Epsilon decay per episode"
 
 num_iterations:
-  value: 1
+  value: 5
   description: "Outer iterations (matching agent_scan_goal50_lr1e-4: 1 iter x 50 ep)"
 
 num_episodes:
@@ -53,8 +53,8 @@ replay_buffer_size:
   description: "Replay buffer capacity"
 
 train_interval:
-  value: 1
-  description: "Gradient update frequency (every N env steps; 3bede13 = 1 = every step)"
+  value: 4
+  description: "Gradient update frequency (every N env steps). DQN-Nature standard = 4. =1 burns ~32 ms/step on K backprops with no convergence gain (off-policy can replay samples)."
 
 test_max_steps:
   value: 500

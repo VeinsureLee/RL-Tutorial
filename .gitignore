@@ -60,3 +60,6 @@ archive/legacy_experiments/
 
 # NPZ 缓存与快照
 *.npz
+
+# 一些待测试的想法
+MyIdeas
