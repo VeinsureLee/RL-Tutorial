@@ -129,6 +129,9 @@ def get_base_map_and_seed() -> dict:
         "num_agents": int(_get_yml_value(mp, "number_of_robots", 4)),
         "num_forbidden_squares": int(_get_yml_value(mp, "num_forbidden_squares", 5)),
         "square_size_range": tuple(_get_yml_value(mp, "square_size_range", [7, 12])),
+        # 障碍分散性约束（缺省 0 = 旧行为，向后兼容）
+        "antenna_keepout_margin": int(_get_yml_value(mp, "antenna_keepout_margin", 0)),
+        "min_obstacle_spacing": int(_get_yml_value(mp, "min_obstacle_spacing", 0)),
         "random_seed": int(_get_yml_value(sd, "random_seed", 42)),
     }
 
@@ -150,6 +153,8 @@ def _ensure_scenario(base: dict) -> dict:
             antenna_position=base["antenna_position"],
             num_forbidden_squares=base["num_forbidden_squares"],
             square_size_range=base["square_size_range"],
+            antenna_keepout_margin=base.get("antenna_keepout_margin", 0),
+            min_obstacle_spacing=base.get("min_obstacle_spacing", 0),
             force_regenerate=True,
         )
     return existing

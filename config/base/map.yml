@@ -9,16 +9,24 @@ antenna_position:
   description: "Antenna (x, y) grid coord, center of 120x60 map."
 
 number_of_robots:
-  value: 1
+  value: 8
   description: "Number of robots/agents"
 
 num_forbidden_squares:
-  value: 5
+  value: 7
   description: "Number of square forbidden regions"
 
 square_size_range:
-  value: [3, 5]
+  value: [6, 10]
   description: "Side length range of forbidden squares (3bede13 = [3, 5])"
+
+antenna_keepout_margin:
+  value: 12
+  description: "Min Chebyshev cell distance from antenna to any obstacle bbox edge. Larger = obstacles avoid the map center (~4.8 m at grid_size=0.4 m for value=12). 0 = legacy behaviour (only the antenna cell itself is protected)."
+
+min_obstacle_spacing:
+  value: 4
+  description: "Min Chebyshev cell gap between any two obstacle bboxes. >=1 forces dispersion (obstacles cannot share an edge or corner). 0 = legacy behaviour (any non-overlapping placement)."
 
 h_AP:
   value: 2.0

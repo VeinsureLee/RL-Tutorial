@@ -91,3 +91,96 @@ def test_get_root_path_resolves_repo_root(repo_root):
         get_abs_path("config/base"),
         str(repo_root / "config" / "base"),
     )
+
+
+# ---------------------------------------------------------------- 障碍生成约束
+# 新加的两个约束要单独验证，因为 _ensure_scenario 缓存命中时 env_cfg fixture 不会
+# 触发重生成；这里直接调 generate_forbidden_areas 显式测。
+
+def _bbox_chebyshev_to_point(r0, c0, sz, point):
+    pr, pc = point
+    dr = max(r0 - pr, pr - (r0 + sz - 1), 0)
+    dc = max(c0 - pc, pc - (c0 + sz - 1), 0)
+    return max(dr, dc)
+
+
+def _bbox_pair_chebyshev(a, b):
+    (ar0, ac0), asz = a
+    (br0, bc0), bsz = b
+    gap_r = max(ar0 - (br0 + bsz - 1), br0 - (ar0 + asz - 1), 0)
+    gap_c = max(ac0 - (bc0 + bsz - 1), bc0 - (ac0 + asz - 1), 0)
+    if gap_r == 0 and gap_c == 0:
+        return 0
+    return max(gap_r, gap_c)
+
+
+def test_obstacles_respect_antenna_keepout():
+    """配置 keepout=12 时，所有障碍 bbox 与天线 Chebyshev 距离 >= 12。"""
+    from config.generator.forbidden_generator import generate_forbidden_areas
+    map_size = (120, 60)
+    antenna = (60, 30)
+    keepout = 12
+    areas = generate_forbidden_areas(
+        map_size=map_size, antenna_position=antenna,
+        num_forbidden_squares=7, square_size_range=(6, 10),
+        random_seed=42,
+        antenna_keepout_margin=keepout, min_obstacle_spacing=4,
+    )
+    assert len(areas) == 7
+    for (pos, sz) in areas:
+        d = _bbox_chebyshev_to_point(pos[0], pos[1], sz, antenna)
+        assert d >= keepout, \
+            f"obstacle bbox=({pos}, sz={sz}) only {d} cells from antenna (need >= {keepout})"
+
+
+def test_obstacles_respect_min_spacing():
+    """配置 spacing=4 时，所有障碍两两 Chebyshev 间距 >= 4。"""
+    from config.generator.forbidden_generator import generate_forbidden_areas
+    spacing = 4
+    areas = generate_forbidden_areas(
+        map_size=(120, 60), antenna_position=(60, 30),
+        num_forbidden_squares=7, square_size_range=(6, 10),
+        random_seed=42,
+        antenna_keepout_margin=12, min_obstacle_spacing=spacing,
+    )
+    for i in range(len(areas)):
+        for j in range(i + 1, len(areas)):
+            gap = _bbox_pair_chebyshev(areas[i], areas[j])
+            assert gap >= spacing, \
+                f"obstacles {i} vs {j} only {gap} cells apart (need >= {spacing})"
+
+
+def test_obstacles_legacy_behaviour_when_zero():
+    """keepout=0 + spacing=0 时退化为旧行为：仅"不重叠 + 不直接覆盖天线"。"""
+    from config.generator.forbidden_generator import generate_forbidden_areas
+    antenna = (60, 30)
+    areas = generate_forbidden_areas(
+        map_size=(120, 60), antenna_position=antenna,
+        num_forbidden_squares=5, square_size_range=(6, 10),
+        random_seed=7,
+        antenna_keepout_margin=0, min_obstacle_spacing=0,
+    )
+    # 不变量：没有 bbox 直接覆盖天线（distance==0 即覆盖；旧逻辑也禁止）
+    for (pos, sz) in areas:
+        assert _bbox_chebyshev_to_point(pos[0], pos[1], sz, antenna) >= 1
+
+
+def test_scenario_npz_roundtrip_with_new_params(tmp_path):
+    """带新参数生成的 scenario.npz 能被 load_scenario 正确反序列化。"""
+    from config.generator.main import get_or_create_scenario, load_scenario
+    out = get_or_create_scenario(
+        random_seed=123, num_agents=2,
+        map_size=(120, 60), antenna_position=(60, 30),
+        num_forbidden_squares=4, square_size_range=(6, 10),
+        antenna_keepout_margin=10, min_obstacle_spacing=3,
+        dynamic_dir=str(tmp_path), force_regenerate=True,
+    )
+    loaded = load_scenario(dynamic_dir=str(tmp_path))
+    assert loaded is not None
+    assert loaded["num_agents"] == 2
+    assert tuple(loaded["map_size"]) == (120, 60)
+    assert len(loaded["forbidden_areas"]) == len(out["forbidden_areas"]) == 4
+    # 反序列化后形状仍是 [((r, c), size), ...]
+    for (pos, sz) in loaded["forbidden_areas"]:
+        assert isinstance(pos, tuple) and len(pos) == 2
+        assert isinstance(sz, int) and sz > 0

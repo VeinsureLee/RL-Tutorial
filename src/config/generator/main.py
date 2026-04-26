@@ -96,6 +96,8 @@ def get_or_create_scenario(
     antenna_position: Union[tuple, list, np.ndarray] = (60, 30),
     num_forbidden_squares: int = 5,
     square_size_range: Tuple[int, int] = (7, 12),
+    antenna_keepout_margin: int = 0,
+    min_obstacle_spacing: int = 0,
     dynamic_dir: Optional[str] = None,
     force_regenerate: bool = False,
 ) -> dict:
@@ -110,9 +112,11 @@ def get_or_create_scenario(
                 and tuple(existing["map_size"]) == map_size:
             return existing
 
-    # 1) 障碍
+    # 1) 障碍：带 antenna keep-out + min-spacing 约束（默认值 0 退化为旧行为）
     forbidden = generate_forbidden_areas(
         map_size, antenna_position, num_forbidden_squares, square_size_range, random_seed,
+        antenna_keepout_margin=int(antenna_keepout_margin),
+        min_obstacle_spacing=int(min_obstacle_spacing),
     )
     # 2) 起终点
     start_states, target_states = generate_states(
@@ -143,6 +147,8 @@ if __name__ == "__main__":
         antenna_position=base["antenna_position"],
         num_forbidden_squares=base["num_forbidden_squares"],
         square_size_range=base["square_size_range"],
+        antenna_keepout_margin=base.get("antenna_keepout_margin", 0),
+        min_obstacle_spacing=base.get("min_obstacle_spacing", 0),
         force_regenerate=True,
     )
     print(f"Scenario regenerated: agents={scenario['num_agents']}, "
