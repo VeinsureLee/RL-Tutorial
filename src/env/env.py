@@ -257,6 +257,12 @@ class MultiRobotEnv:
                 rewards[i] = step_rewards[i] + approach_rewards[i]
                 continue
 
+            # 原地不动（选择 [0,0] 或等效停留）：未到终点只计 step_reward，approach=0
+            if int(r) == int(self.positions[i, 0]) and int(c) == int(self.positions[i, 1]):
+                approach_rewards[i] = 0.0
+                rewards[i] = step_rewards[i]
+                continue
+
             # 距离变化：使用 YAML 中配置的 closer/farther/same
             old_dist = abs(self.positions[i, 0] - self.target_states[i][0]) + \
                        abs(self.positions[i, 1] - self.target_states[i][1])
