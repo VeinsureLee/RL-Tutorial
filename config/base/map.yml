@@ -9,7 +9,7 @@ antenna_position:
   description: "Antenna (x, y) grid coord, center of 120x60 map."
 
 number_of_robots:
-  value: 8
+  value: 2
   description: "Number of robots/agents"
 
 num_forbidden_squares:

@@ -1,13 +1,14 @@
 """
-训练曲线绘图：7 张图。
+训练曲线绘图：8 张图。
 
-6 张 1x2 布局（左：全局/总和，叠 max 虚线；右：每 agent）：
+7 张 1x2 布局（左：全局/总和，叠 max 虚线；右：每 agent）：
     {prefix}_return.png         # 整体 return
     {prefix}_step_reward.png    # 时间惩罚累计
     {prefix}_approach_reward.png# 接近目标奖励累计（含 closer/farther/same/goal/forbidden）
     {prefix}_path_reward.png    # step + approach 之和；理想最短路径下趋向 +reward_goal
     {prefix}_ber_reward.png     # 通信奖励累计
     {prefix}_ber.png            # 每 ep 的 mean(-log10 BER)
+    {prefix}_ber_best.png       # 每 ep 的 max(-log10 BER) ≡ -log10(min BER)，best signal quality reached
 
 1 张单图（无 per-agent 拆分，因为 wall-clock 是全局指标）：
     {prefix}_time.png           # 每 ep 的 wall-clock 耗时（秒）
@@ -158,6 +159,18 @@ def plot_training(history: dict, fig_dir: str, prefix: str = "", algo_label: str
         ylabel="-log10(BER)",
         out_path=_fname(fig_dir, prefix, "ber.png"),
     ))
+
+    # 每 ep 的最佳信号质量：max(-log10 BER) ≡ -log10(min BER)；与 mean 对照看"峰值"通信窗口
+    ber_max_list = history.get("ber_max_list") or []
+    agent_ber_max_lists = history.get("agent_ber_max_lists") or []
+    if ber_max_list and agent_ber_max_lists:
+        paths.append(_plot_metric(
+            ber_max_list, agent_ber_max_lists,
+            title_total=f"{algo_label} Best (-log10 BER) vs Episode",
+            title_agents=f"{algo_label} Per-Agent Best (-log10 BER) vs Episode",
+            ylabel="-log10(BER)",
+            out_path=_fname(fig_dir, prefix, "ber_best.png"),
+        ))
 
     # Time-Ep：单图。time_list 缺失时跳过，向后兼容旧 history dict。
     time_values = history.get("time_list") or []

@@ -45,6 +45,7 @@ reports/
 CLAUDE.md
 plans/
 todo/
+docs/superpowers/
 
 # 训练产物（每次 run 体量大，按需手动归档）
 experiments/runs/

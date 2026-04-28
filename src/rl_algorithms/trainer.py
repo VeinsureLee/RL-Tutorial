@@ -71,6 +71,8 @@ def train(env, model,
         agent_return_lists / agent_step_return_lists / agent_approach_return_lists / agent_comm_return_lists
         ber_list           : 每 ep 在所有 step/agent 上的 mean(-log10 BER)（已裁剪下限 1e-20）
         agent_ber_lists    : 每 ep 每 agent 的 mean(-log10 BER)
+        ber_max_list       : 每 ep 在所有 step/agent 上的 max(-log10 BER) ≡ -log10(min BER)
+        agent_ber_max_lists: 每 ep 每 agent 的 max(-log10 BER)
     """
     model.batch_size = batch_size
     num_agents = env.num_agents
@@ -93,6 +95,9 @@ def train(env, model,
     agent_comm_return_lists = [[] for _ in range(num_agents)]
     ber_list = []
     agent_ber_lists = [[] for _ in range(num_agents)]
+    # 每 ep 的最佳 BER 质量：max(-log10 BER) ≡ -log10(min BER)
+    ber_max_list = []
+    agent_ber_max_lists = [[] for _ in range(num_agents)]
     time_list = []  # 每 episode wall-clock 耗时（秒）
 
     global_step = 0
@@ -164,8 +169,13 @@ def train(env, model,
                 agent_comm_return_lists[i].append(float(ep_comm[i]))
                 mean_neglog_i = float(np.mean(ep_neglog_ber_per_agent[i])) if ep_neglog_ber_per_agent[i] else 0.0
                 agent_ber_lists[i].append(mean_neglog_i)
+                # 每 agent 在该 ep 的最佳信号质量：max(-log10 BER)
+                max_neglog_i = float(np.max(ep_neglog_ber_per_agent[i])) if ep_neglog_ber_per_agent[i] else 0.0
+                agent_ber_max_lists[i].append(max_neglog_i)
                 ep_neglog_all.extend(ep_neglog_ber_per_agent[i])
             ber_list.append(float(np.mean(ep_neglog_all)) if ep_neglog_all else 0.0)
+            # 全局最佳：所有 agent 所有 step 中最小 BER 对应的 -log10
+            ber_max_list.append(float(np.max(ep_neglog_all)) if ep_neglog_all else 0.0)
 
             ep_dt = time.perf_counter() - ep_t0
             time_list.append(float(ep_dt))
@@ -204,5 +214,7 @@ def train(env, model,
         "agent_comm_return_lists": agent_comm_return_lists,
         "ber_list": ber_list,
         "agent_ber_lists": agent_ber_lists,
+        "ber_max_list": ber_max_list,
+        "agent_ber_max_lists": agent_ber_max_lists,
         "time_list": time_list,
     }

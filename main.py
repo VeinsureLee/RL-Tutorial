@@ -6,6 +6,7 @@
     python main.py --model dqn   --mode train --num_episodes 200 --lr 5e-5
     python main.py --model madqn --mode test  --model_path experiments/runs/<name>/model.pth
     python main.py --model dqn   --mode test  --max_steps 500
+    python main.py --model dqn   --mode train --placement custom   # 交互式起终点选择
 
 参数优先级: 命令行 > config/base/rl.yml > 代码内默认。
 
@@ -31,11 +32,13 @@ if _SRC not in sys.path:
 
 import torch
 
-from env.env import MultiRobotEnv
 from config.yml_config import get_env_config, get_rl_config
-from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, train, test, plot_training
-from utils.logger_handler import get_logger
-from utils.run_manager import RunContext
+
+# env / rl_algorithms 的导入延迟到 main() 内部执行，原因：
+# env/env.py 和 rl_algorithms/plot.py 在模块加载时调用 matplotlib.use("Agg")，
+# 会将 matplotlib 后端锁定为非交互模式；而 --placement custom 需要在此之前
+# 弹出交互式图形窗口选择 agent 起终点。延迟导入确保可视化在 Agg 锁定前完成。
+# torch 本身不触碰 matplotlib，可以安全地在模块层级导入。
 
 
 def _parse_args() -> argparse.Namespace:
@@ -44,7 +47,7 @@ def _parse_args() -> argparse.Namespace:
                    choices=["dqn", "madqn", "shared_madqn", "qmix"],
                    default="shared_madqn",
                    help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix")
-    p.add_argument("--mode", choices=["train", "test"], default="test", help="mode")
+    p.add_argument("--mode", choices=["train", "test"], default="train", help="mode")
 
     # 训练超参（命令行覆盖 rl.yml）
     p.add_argument("--lr", type=float, default=None)
@@ -76,10 +79,14 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no_plot", action="store_true")
     p.add_argument("--no_test_after_train", action="store_true",
                    help="skip the auto test episode at the end of training")
-    p.add_argument("--randomize_reset", choices=["auto", "true", "false"], default="auto",
+    p.add_argument("--randomize_reset", choices=["auto", "true", "false"], default="false",
                    help="resample (start, target) every env.reset(); "
                         "auto=true for shared_madqn / false otherwise (default), "
                         "true/false to override")
+    p.add_argument("--placement", choices=["default", "custom"], default="custom",
+                   help="agent placement: default = use scenario.npz fixed states (or random if "
+                        "randomize_on_reset=True) | custom = open interactive visual selector "
+                        "to click start/target positions for each agent")
     return p.parse_args()
 
 
@@ -111,7 +118,7 @@ def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int 
     return MADQN(env, **common)
 
 
-def _make_run(args, cfg: dict, env, mode: str) -> RunContext:
+def _make_run(args, cfg: dict, env, mode: str):
     """构造 RunContext；extra 字段自动包含奖励权重 ω 和学习率。"""
     extra = {
         "omega": env.omega,
@@ -234,11 +241,35 @@ def _run_test(args, cfg: dict, env, device: torch.device) -> dict:
 
 
 def main():
-    args = _parse_args()
-    cfg = _resolve_cfg(args)
+    # 将 Agg-setting 模块的延迟导入声明为 module-level globals，使各 helper 函数可见
+    global MultiRobotEnv, DQN, MADQN, SharedMADQN, QMIX
+    global train, test, plot_training, get_logger, RunContext
 
+    args = _parse_args()
+
+    # --- Step 1: 若 --placement custom，在任何 Agg-setting 导入之前完成交互选点 ---
+    _custom_starts = _custom_targets = None
+    if args.placement == "custom":
+        from config.customer_choice import choose_placements
+        _early_cfg = get_env_config()
+        _, _custom_starts, _custom_targets = choose_placements(_early_cfg)
+
+    # --- Step 2: 延迟导入（env.py / plot.py 此时才锁定 Agg 后端）---
+    from env.env import MultiRobotEnv
+    from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, train, test, plot_training
+    from utils.logger_handler import get_logger
+    from utils.run_manager import RunContext
+
+    # --- Step 3: 正常构建环境 ---
+    cfg = _resolve_cfg(args)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env_cfg = get_env_config()
+
+    # 应用自定义起终点（覆盖 scenario.npz 中的默认值）
+    if _custom_starts is not None:
+        env_cfg["start_states"] = _custom_starts
+        env_cfg["target_states"] = _custom_targets
+
     # reset 起终点是否随机化：
     #   - auto（默认）：仅 shared_madqn 开启，其它算法保持 scenario.npz 固定起终点
     #   - true / false：用户手动覆盖（调试用）
@@ -247,6 +278,8 @@ def main():
     else:
         randomize = (args.randomize_reset == "true")
     print(f"[env] randomize_on_reset = {randomize} ({'auto' if args.randomize_reset == 'auto' else 'override'})")
+    if args.placement == "custom" and randomize:
+        print("[placement] WARNING: randomize_on_reset=True — custom placement applies to first episode only.")
     env = MultiRobotEnv(env_cfg, randomize_on_reset=randomize)
 
     if args.mode == "train":
