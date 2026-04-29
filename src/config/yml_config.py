@@ -211,6 +211,7 @@ def get_env_config() -> dict:
         "channel_block_length": channel_cfg.channel_block_length,
         "packet_size": channel_cfg.packet_size,
         "noise_power_mw": channel_cfg.noise_power_mw,
+        "comm_model": str(_get_yml_value(_load_base_yml("channel"), "comm_model", "noma")),
         "random_seed": base["random_seed"],
     }
 

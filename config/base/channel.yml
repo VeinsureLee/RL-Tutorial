@@ -39,3 +39,7 @@ P_min_diff:
 num_power_levels:
   value: 1
   description: "Number of discrete power levels p. Set to 1 during nav-only training so n_actions = n_dirs (matches 3bede13 5-action layout). Restore to 3 after nav converges."
+
+comm_model:
+  value: noma
+  description: "通信多址方案: noma | ofdma"
