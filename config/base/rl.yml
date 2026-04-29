@@ -1,32 +1,21 @@
-description: "DQN / MADQN hyperparameters (ported from commit 3bede13 — empirically convergent)"
+description: "RL hyperparameters: DQN / MADQN / QMIX / VDN / PPO / MAPPO"
 
 algo:
   value: "madqn"
-  description: "Algorithm: dqn or madqn"
+  description: "Algorithm: dqn | madqn | shared_madqn | qmix | vdn | ppo | mappo"
 
+# --- Common ---
 lr:
   value: 1.0e-4
-  description: "Learning rate (matching agent_scan_goal50_lr1e-4: lowered from 1e-3 to stabilize larger N)"
+  description: "Learning rate (DQN/MADQN: 1e-4; PPO/MAPPO: override to 3e-4)"
 
 gamma:
   value: 0.99
-  description: "Discount factor (3bede13 = 0.99; effective horizon ~100 steps)"
-
-epsilon:
-  value: 0.8
-  description: "Initial exploration rate (reset at the start of each iteration)"
-
-epsilon_min:
-  value: 0.15
-  description: "Minimum exploration rate (matching agent_scan_goal50_lr1e-4)"
-
-epsilon_decay:
-  value: 0.95
-  description: "Epsilon decay per episode"
+  description: "Discount factor (effective horizon ~100 steps)"
 
 num_iterations:
   value: 5
-  description: "Outer iterations (matching agent_scan_goal50_lr1e-4: 1 iter x 50 ep)"
+  description: "Outer iterations"
 
 num_episodes:
   value: 50
@@ -38,23 +27,11 @@ episode_length:
 
 batch_size:
   value: 64
-  description: "Minibatch size for Q update (3bede13 = 64)"
+  description: "Minibatch size for gradient updates"
 
 hidden_dim:
   value: 128
-  description: "Q-network hidden layer size"
-
-update_freq:
-  value: 10
-  description: "Target-network sync frequency (every N env steps; 3bede13 = 10)"
-
-replay_buffer_size:
-  value: 50000
-  description: "Replay buffer capacity"
-
-train_interval:
-  value: 4
-  description: "Gradient update frequency (every N env steps). DQN-Nature standard = 4. =1 burns ~32 ms/step on K backprops with no convergence gain (off-policy can replay samples)."
+  description: "Hidden layer size for Q / Actor-Critic networks"
 
 test_max_steps:
   value: 500
@@ -63,3 +40,57 @@ test_max_steps:
 model_dir:
   value: "models"
   description: "Directory for .pth checkpoints"
+
+# --- Off-policy only (DQN / MADQN / QMIX / VDN) ---
+epsilon:
+  value: 0.8
+  description: "Initial exploration rate (reset at the start of each iteration)"
+
+epsilon_min:
+  value: 0.15
+  description: "Minimum exploration rate"
+
+epsilon_decay:
+  value: 0.95
+  description: "Epsilon decay per episode"
+
+update_freq:
+  value: 10
+  description: "Target-network sync frequency (every N env steps)"
+
+replay_buffer_size:
+  value: 50000
+  description: "Replay buffer capacity"
+
+train_interval:
+  value: 4
+  description: "Gradient update frequency (every N env steps)"
+
+# --- On-policy only (PPO / MAPPO) ---
+update_interval:
+  value: 1024
+  description: "PPO: rollout length — steps between policy updates"
+
+gae_lambda:
+  value: 0.95
+  description: "PPO: GAE lambda for advantage estimation"
+
+clip_epsilon:
+  value: 0.15
+  description: "PPO: clipping epsilon for policy ratio"
+
+entropy_coef:
+  value: 0.01
+  description: "PPO: entropy bonus coefficient (encourages exploration)"
+
+value_coef:
+  value: 0.5
+  description: "PPO: value loss coefficient"
+
+ppo_epochs:
+  value: 5
+  description: "PPO: number of epochs to reuse each rollout"
+
+ppo_lr:
+  value: 1e-4
+  description: "PPO: recommended learning rate (override via --lr 3e-4)"

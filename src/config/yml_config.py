@@ -228,16 +228,35 @@ _RL_DEFAULTS = dict(
     replay_buffer_size=50000,
     train_interval=1,
     test_max_steps=500, model_dir="models",
+    # PPO/MAPPO 专用
+    gae_lambda=0.95, clip_epsilon=0.2,
+    entropy_coef=0.01, value_coef=0.5,
+    num_epochs=10, ppo_epochs=10,  # 别名兼容
+    update_interval=2048,
 )
 
 
-def get_rl_config(**overrides) -> dict:
-    """从 rl.yml 读默认，overrides 中非 None 的值覆盖之。"""
+def get_rl_config(algo: str = None, **overrides) -> dict:
+    """从 rl.yml 读默认，overrides 中非 None 的值覆盖之。
+
+    对 PPO/MAPPO 自动使用 ppo_lr (3e-4) 作为学习率，除非用户手动覆盖。
+    """
     rl_yml = _load_base_yml("rl")
     cfg = {}
     for k, default in _RL_DEFAULTS.items():
         v = _get_yml_value(rl_yml, k, default)
         cfg[k] = type(default)(v) if v is not None else default
+
+    # PPO/MAPPO 特殊处理：默认使用 ppo_lr 而非通用 lr
+    if algo in ("ppo", "mappo"):
+        ppo_lr = _get_yml_value(rl_yml, "ppo_lr", 3.0e-4)
+        cfg["lr"] = type(_RL_DEFAULTS["lr"])(ppo_lr) if ppo_lr is not None else _RL_DEFAULTS["lr"]
+
+    # algo 参数覆盖
+    if algo is not None:
+        cfg["algo"] = algo
+
+    # 用户覆盖优先级最高
     for k, v in overrides.items():
         if v is not None:
             cfg[k] = v

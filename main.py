@@ -42,12 +42,20 @@ from config.yml_config import get_env_config, get_rl_config
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / SharedMADQN / QMIX / VDN)")
+    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / SharedMADQN / QMIX / VDN / PPO / MAPPO)")
     p.add_argument("--model",
-                   choices=["dqn", "madqn", "shared_madqn", "qmix", "vdn"],
-                   default="shared_madqn",
-                   help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix | vdn")
+                   choices=["dqn", "madqn", "shared_madqn", "qmix", "vdn", "ppo", "mappo"],
+                   default="mappo",
+                   help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix | vdn | ppo | mappo")
     p.add_argument("--mode", choices=["train", "test"], default="train", help="mode")
+
+    # PPO/MAPPO 专用参数
+    p.add_argument("--gae_lambda", type=float, default=None, help="PPO: GAE lambda")
+    p.add_argument("--clip_epsilon", type=float, default=None, help="PPO: clipping epsilon")
+    p.add_argument("--entropy_coef", type=float, default=None, help="PPO: entropy coefficient")
+    p.add_argument("--value_coef", type=float, default=None, help="PPO: value loss coefficient")
+    p.add_argument("--ppo_epochs", type=int, default=None, help="PPO: number of epochs per update")
+    p.add_argument("--update_interval", type=int, default=None, help="PPO: steps between updates")
 
     # 训练超参（命令行覆盖 rl.yml）
     p.add_argument("--lr", type=float, default=None)
@@ -98,12 +106,32 @@ def _resolve_cfg(args: argparse.Namespace) -> dict:
         "lr", "gamma", "epsilon", "epsilon_min", "epsilon_decay",
         "num_iterations", "num_episodes", "episode_length",
         "batch_size", "hidden_dim", "update_freq", "replay_buffer_size",
-        "train_interval",
+        "train_interval", "update_interval",
+        "gae_lambda", "clip_epsilon", "entropy_coef", "value_coef", "ppo_epochs",
     }}
     return get_rl_config(algo=args.model, **overrides)
 
 
 def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int = 0):
+    # 检查是否为 PPO/MAPPO
+    if algo in ("ppo", "mappo"):
+        ppo_common = dict(
+            lr=cfg["lr"], gamma=cfg.get("gamma", 0.99),
+            gae_lambda=cfg.get("gae_lambda", 0.95),
+            clip_epsilon=cfg.get("clip_epsilon", 0.2),
+            entropy_coef=cfg.get("entropy_coef", 0.01),
+            value_coef=cfg.get("value_coef", 0.5),
+            num_epochs=cfg.get("ppo_epochs", cfg.get("num_epochs", 10)),
+            batch_size=cfg["batch_size"],
+            hidden_dim=cfg["hidden_dim"],
+            device=device,
+        )
+        if algo == "ppo":
+            return PPO(env, agent_id=agent_id, **ppo_common)
+        else:
+            return MAPPO(env, **ppo_common)
+
+    # off-policy 算法
     common = dict(
         lr=cfg["lr"], gamma=cfg["gamma"],
         epsilon=cfg["epsilon"], epsilon_min=cfg["epsilon_min"],
@@ -147,7 +175,7 @@ def _run_train(args, cfg: dict, env, device: torch.device, env_cfg: dict) -> dic
     model = _build_model(args.model, env, cfg, device, agent_id=args.agent_id)
     logger = get_logger(f"{args.model}_{run.timestamp}", log_file=run.log_path)
 
-    history = train(
+    train_kwargs = dict(
         env=env, model=model,
         num_iterations=cfg["num_iterations"],
         num_episodes=cfg["num_episodes"],
@@ -156,6 +184,9 @@ def _run_train(args, cfg: dict, env, device: torch.device, env_cfg: dict) -> dic
         train_interval=cfg["train_interval"],
         logger=logger,
     )
+    if "update_interval" in cfg:
+        train_kwargs["update_interval"] = cfg["update_interval"]
+    history = train(**train_kwargs)
 
     run.write_metrics_csv(history)
 
@@ -246,7 +277,7 @@ def _run_test(args, cfg: dict, env, device: torch.device) -> dict:
 
 def main():
     # 将 Agg-setting 模块的延迟导入声明为 module-level globals，使各 helper 函数可见
-    global MultiRobotEnv, DQN, MADQN, SharedMADQN, QMIX, VDN
+    global MultiRobotEnv, DQN, MADQN, SharedMADQN, QMIX, VDN, PPO, MAPPO
     global train, test, plot_training, get_logger, RunContext
 
     args = _parse_args()
@@ -260,7 +291,7 @@ def main():
 
     # --- Step 2: 延迟导入（env.py / plot.py 此时才锁定 Agg 后端）---
     from env.env import MultiRobotEnv
-    from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, VDN, train, test, plot_training
+    from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, VDN, PPO, MAPPO, train, test, plot_training
     from utils.logger_handler import get_logger
     from utils.run_manager import RunContext
 
