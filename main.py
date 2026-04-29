@@ -87,6 +87,8 @@ def _parse_args() -> argparse.Namespace:
                    help="agent placement: default = use scenario.npz fixed states (or random if "
                         "randomize_on_reset=True) | custom = open interactive visual selector "
                         "to click start/target positions for each agent")
+    p.add_argument("--comm_model", choices=["noma", "ofdma"], default=None,
+                   help="communication access scheme: noma (default) | ofdma")
     return p.parse_args()
 
 
@@ -280,6 +282,11 @@ def main():
     print(f"[env] randomize_on_reset = {randomize} ({'auto' if args.randomize_reset == 'auto' else 'override'})")
     if args.placement == "custom" and randomize:
         print("[placement] WARNING: randomize_on_reset=True — custom placement applies to first episode only.")
+
+    # CLI 覆盖 comm_model（不传则保持 channel.yml 默认值）
+    if args.comm_model is not None:
+        env_cfg["comm_model"] = args.comm_model
+
     env = MultiRobotEnv(env_cfg, randomize_on_reset=randomize)
 
     if args.mode == "train":
