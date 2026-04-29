@@ -18,7 +18,6 @@ from PIL import Image
 from io import BytesIO
 
 from communication.precompute import PrecomputedRadioMap
-from communication.ber_reward import compute_ber_rewards
 
 # 全局禁用 Unicode minus，避免 Windows 下 'Font does not have glyph for U+2212' 警告
 matplotlib.rcParams["axes.unicode_minus"] = False
@@ -102,6 +101,16 @@ class MultiRobotEnv:
             sigma_rayleigh=config.get("sigma_rayleigh", 1.2),
         )
 
+        # 通信模型路由：noma（默认）或 ofdma
+        _comm_model = str(config.get("comm_model", "noma")).lower()
+        if _comm_model == "ofdma":
+            from communication.ofdma import compute_ber_rewards_ofdma
+            self._compute_comm = compute_ber_rewards_ofdma
+        else:
+            from communication.ber_reward import compute_ber_rewards
+            self._compute_comm = compute_ber_rewards
+        self.comm_model = _comm_model
+
         # 随机数生成器（Rayleigh 衰落 + 可选的 reset 随机化共用一个 rng）
         self.rng = np.random.default_rng(config.get("random_seed", 42))
 
@@ -136,6 +145,7 @@ class MultiRobotEnv:
         print(f"  n_actions    : {self.n_actions} ({self.n_dirs} dirs x {self.n_powers} powers)")
         print(f"  omega        : {self.omega}")
         print(f"  reward_step  : {self.reward_step}")
+        print(f"  comm_model   : {self.comm_model}")
         print("---------------------------------")
 
     # ---------------------------------------------------------------- 基础工具
@@ -287,7 +297,7 @@ class MultiRobotEnv:
         if len(active_indices) > 0:
             active_positions = self.positions[active_indices]
             active_powers = power_indices[active_indices]
-            ber_result = compute_ber_rewards(
+            ber_result = self._compute_comm(
                 radio_map=self.radio_map,
                 positions=active_positions,
                 power_actions=active_powers,
