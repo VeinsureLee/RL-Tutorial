@@ -10,10 +10,11 @@ import matplotlib.pyplot as plt
 
 from rl_algorithms.madqn import MADQN
 from rl_algorithms.qmix import QMIX
+from rl_algorithms.vdn import VDN
 
 
 def _take_all_actions(env, model, states):
-    if isinstance(model, (MADQN, QMIX)):
+    if isinstance(model, (MADQN, QMIX, VDN)):
         return model.take_action(states, training=False)
     actions = [int(np.random.randint(env.n_actions)) for _ in range(env.num_agents)]
     actions[model.agent_id] = model.take_action(states[model.agent_id], training=False)

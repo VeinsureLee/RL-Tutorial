@@ -5,6 +5,7 @@
     madqn/        : algo.py + qnet.py
     shared_madqn/ : algo.py + qnet.py
     qmix/         : algo.py + qnet.py + mixer.py
+    vdn/          : algo.py + qnet.py
 
 跨算法的公共组件直接放在本目录：
     replay.py  - ReplayBuffer / TargetReplayBuffer / JointReplayBuffer
@@ -16,8 +17,9 @@ from rl_algorithms.dqn import DQN
 from rl_algorithms.madqn import MADQN
 from rl_algorithms.shared_madqn import SharedMADQN
 from rl_algorithms.qmix import QMIX
+from rl_algorithms.vdn import VDN
 from rl_algorithms.trainer import train
 from rl_algorithms.tester import test
 from rl_algorithms.plot import plot_training
 
-__all__ = ["DQN", "MADQN", "SharedMADQN", "QMIX", "train", "test", "plot_training"]
+__all__ = ["DQN", "MADQN", "SharedMADQN", "QMIX", "VDN", "train", "test", "plot_training"]

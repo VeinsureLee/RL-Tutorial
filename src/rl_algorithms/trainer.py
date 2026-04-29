@@ -14,11 +14,12 @@ from tqdm import tqdm
 from rl_algorithms.dqn import DQN
 from rl_algorithms.madqn import MADQN
 from rl_algorithms.qmix import QMIX
+from rl_algorithms.vdn import VDN
 
 
 def _take_all_actions(env, model, states, training: bool):
     """按模型类型返回所有 agent 的动作列表。DQN 下非 agent_id 的 agent 走均匀随机。"""
-    if isinstance(model, (MADQN, QMIX)):
+    if isinstance(model, (MADQN, QMIX, VDN)):
         return model.take_action(states, training=training)
     actions = [int(np.random.randint(env.n_actions)) for _ in range(env.num_agents)]
     actions[model.agent_id] = model.take_action(states[model.agent_id], training=training)
@@ -28,8 +29,8 @@ def _take_all_actions(env, model, states, training: bool):
 def _push_and_maybe_update(model, step_data, global_step: int, train_interval: int):
     """把 (s, a, r, ns, d) 写进 replay；每 train_interval 步采样一次进行梯度更新。"""
     states, actions, rewards, next_states, dones = step_data
-    if isinstance(model, QMIX):
-        # QMIX：单一联合 buffer，单次联合反传
+    if isinstance(model, (QMIX, VDN)):
+        # QMIX / VDN：单一联合 buffer，单次联合反传
         model.buffer.add(states, actions, rewards, next_states, dones)
         if global_step % train_interval == 0 and len(model.buffer) >= model.batch_size:
             model.update(model.buffer.sample(model.batch_size))
@@ -49,8 +50,8 @@ def _push_and_maybe_update(model, step_data, global_step: int, train_interval: i
 
 def _sync_target(model, global_step: int):
     if global_step % model.update_freq == 0:
-        if isinstance(model, QMIX):
-            model.update_target_qnet()  # 一次同步所有 Q_i 与 mixer
+        if isinstance(model, (QMIX, VDN)):
+            model.update_target_qnet()  # 一次同步所有 Q_i（QMIX 含 mixer）
         elif isinstance(model, MADQN):
             for i in range(model.num_agents):
                 model.update_target_qnet(i)
@@ -78,8 +79,11 @@ def train(env, model,
     num_agents = env.num_agents
     is_madqn = isinstance(model, MADQN)
     is_qmix = isinstance(model, QMIX)
+    is_vdn = isinstance(model, VDN)
     if is_qmix:
         algo_name = "QMIX"
+    elif is_vdn:
+        algo_name = "VDN"
     elif is_madqn:
         algo_name = "MADQN"
     else:
@@ -109,7 +113,7 @@ def train(env, model,
         if is_madqn:
             lr_val = model.optimizers[0].param_groups[0]['lr']
         else:
-            # DQN / QMIX 都只有一个 optimizer
+            # DQN / QMIX / VDN 都只有一个 optimizer
             lr_val = model.optimizer.param_groups[0]['lr']
         logger.info("%s training start: iters=%s episodes=%s ep_len=%s agents=%s lr=%.1e gamma=%.2f eps=%.2f bs=%s",
                     algo_name, num_iterations, num_episodes, episode_length, num_agents,

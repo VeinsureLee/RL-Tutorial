@@ -1,6 +1,7 @@
 .idea
 .cursor
 .claude
+.agents
 
 # Python __pycache__
 __pycache__/

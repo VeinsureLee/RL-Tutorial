@@ -42,11 +42,11 @@ from config.yml_config import get_env_config, get_rl_config
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / SharedMADQN / QMIX)")
+    p = argparse.ArgumentParser(description="Multi-Robot DRL Navigation (DQN / MADQN / SharedMADQN / QMIX / VDN)")
     p.add_argument("--model",
-                   choices=["dqn", "madqn", "shared_madqn", "qmix"],
+                   choices=["dqn", "madqn", "shared_madqn", "qmix", "vdn"],
                    default="shared_madqn",
-                   help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix")
+                   help="algorithm: dqn | madqn (independent) | shared_madqn (parameter sharing) | qmix | vdn")
     p.add_argument("--mode", choices=["train", "test"], default="train", help="mode")
 
     # 训练超参（命令行覆盖 rl.yml）
@@ -115,6 +115,8 @@ def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int 
         return DQN(env, agent_id=agent_id, **common)
     if algo == "qmix":
         return QMIX(env, **common)
+    if algo == "vdn":
+        return VDN(env, **common)
     if algo == "shared_madqn":
         return SharedMADQN(env, **common)
     return MADQN(env, **common)
@@ -244,7 +246,7 @@ def _run_test(args, cfg: dict, env, device: torch.device) -> dict:
 
 def main():
     # 将 Agg-setting 模块的延迟导入声明为 module-level globals，使各 helper 函数可见
-    global MultiRobotEnv, DQN, MADQN, SharedMADQN, QMIX
+    global MultiRobotEnv, DQN, MADQN, SharedMADQN, QMIX, VDN
     global train, test, plot_training, get_logger, RunContext
 
     args = _parse_args()
@@ -258,7 +260,7 @@ def main():
 
     # --- Step 2: 延迟导入（env.py / plot.py 此时才锁定 Agg 后端）---
     from env.env import MultiRobotEnv
-    from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, train, test, plot_training
+    from rl_algorithms import DQN, MADQN, SharedMADQN, QMIX, VDN, train, test, plot_training
     from utils.logger_handler import get_logger
     from utils.run_manager import RunContext
 
