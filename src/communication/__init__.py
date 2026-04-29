@@ -11,6 +11,7 @@ from communication.channel import (
     number_of_antenna,
 )
 from communication.ber_reward import cluster_agents, compute_ber_rewards
+from communication.ofdma import compute_ber_rewards_ofdma
 from communication.SIC import (
     compute_sinr,
     compute_ber,
@@ -30,6 +31,7 @@ __all__ = [
     "number_of_antenna",
     "cluster_agents",
     "compute_ber_rewards",
+    "compute_ber_rewards_ofdma",
     "compute_sinr",
     "compute_ber",
     "ber_to_reward",

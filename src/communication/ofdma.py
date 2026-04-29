@@ -50,7 +50,7 @@ def compute_ber_rewards_ofdma(
 
     # 可用功率等级（与 NOMA strong_powers 结构对称）
     p = num_power_levels
-    power_levels = np.array([P_per_agent / (2 ** i) for i in range(1, p + 1)])  # 降序
+    power_levels = np.array([P_per_agent / (2 ** i) for i in range(1, p + 1)])  # 降序：最大 P/2，最小 P/2^p
 
     # 子载波噪声功率：总噪声 / K
     noise_per_sub = noise_power / K
@@ -63,7 +63,7 @@ def compute_ber_rewards_ofdma(
     gains = np.sum(np.abs(H) ** 2, axis=1)  # (K,)
 
     # 按功率动作选取功率
-    p_indices = np.minimum(power_actions, len(power_levels) - 1)
+    p_indices = np.clip(power_actions, 0, len(power_levels) - 1)
     powers = power_levels[p_indices]  # (K,)
 
     snr = powers * gains / noise_per_sub  # (K,)
