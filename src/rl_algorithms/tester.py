@@ -25,6 +25,13 @@ def _take_all_actions(env, model, states):
 
 def _run_episode(env, model, max_steps: int):
     states = env.reset()
+
+    # on-policy 算法在 reset 时更新 start_idx
+    if isinstance(model, MAPPO):
+        model.reset_start_indices()
+    elif isinstance(model, PPO):
+        model.reset_start_idx()
+
     total = 0.0
     step_sum = 0.0
     approach_sum = 0.0

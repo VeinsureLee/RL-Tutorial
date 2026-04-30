@@ -230,9 +230,12 @@ _RL_DEFAULTS = dict(
     test_max_steps=500, model_dir="models",
     # PPO/MAPPO 专用
     gae_lambda=0.95, clip_epsilon=0.2,
-    entropy_coef=0.01, value_coef=0.5,
+    entropy_coef=0.05, value_coef=0.5,
+    entropy_coef_min=0.001, entropy_coef_decay=0.97,
+    test_temperature=0.3,
     num_epochs=10, ppo_epochs=10,  # 别名兼容
     update_interval=2048,
+    reward_scale=0.01,
 )
 
 

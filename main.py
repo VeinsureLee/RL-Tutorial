@@ -52,10 +52,13 @@ def _parse_args() -> argparse.Namespace:
     # PPO/MAPPO 专用参数
     p.add_argument("--gae_lambda", type=float, default=None, help="PPO: GAE lambda")
     p.add_argument("--clip_epsilon", type=float, default=None, help="PPO: clipping epsilon")
-    p.add_argument("--entropy_coef", type=float, default=None, help="PPO: entropy coefficient")
+    p.add_argument("--entropy_coef", type=float, default=None, help="PPO: entropy coefficient (start)")
+    p.add_argument("--entropy_coef_min", type=float, default=None, help="PPO: entropy coef floor")
+    p.add_argument("--entropy_coef_decay", type=float, default=None, help="PPO: entropy coef decay per ep")
     p.add_argument("--value_coef", type=float, default=None, help="PPO: value loss coefficient")
     p.add_argument("--ppo_epochs", type=int, default=None, help="PPO: number of epochs per update")
     p.add_argument("--update_interval", type=int, default=None, help="PPO: steps between updates")
+    p.add_argument("--test_temperature", type=float, default=None, help="PPO: softmax temperature at test")
 
     # 训练超参（命令行覆盖 rl.yml）
     p.add_argument("--lr", type=float, default=None)
@@ -97,6 +100,9 @@ def _parse_args() -> argparse.Namespace:
                         "to click start/target positions for each agent")
     p.add_argument("--comm_model", choices=["noma", "ofdma"], default=None,
                    help="communication access scheme: noma (default) | ofdma")
+    p.add_argument("--device", choices=["cpu", "cuda", "auto"], default="cpu",
+                   help="compute device: cpu (default, faster for small Q-nets due to "
+                        "kernel-launch overhead) | cuda | auto (cuda if available)")
     return p.parse_args()
 
 
@@ -108,6 +114,7 @@ def _resolve_cfg(args: argparse.Namespace) -> dict:
         "batch_size", "hidden_dim", "update_freq", "replay_buffer_size",
         "train_interval", "update_interval",
         "gae_lambda", "clip_epsilon", "entropy_coef", "value_coef", "ppo_epochs",
+        "entropy_coef_min", "entropy_coef_decay", "test_temperature",
     }}
     return get_rl_config(algo=args.model, **overrides)
 
@@ -119,17 +126,21 @@ def _build_model(algo: str, env, cfg: dict, device: torch.device, agent_id: int 
             lr=cfg["lr"], gamma=cfg.get("gamma", 0.99),
             gae_lambda=cfg.get("gae_lambda", 0.95),
             clip_epsilon=cfg.get("clip_epsilon", 0.2),
-            entropy_coef=cfg.get("entropy_coef", 0.01),
+            entropy_coef=cfg.get("entropy_coef", 0.05),
+            entropy_coef_min=cfg.get("entropy_coef_min", 0.001),
+            entropy_coef_decay=cfg.get("entropy_coef_decay", 0.97),
             value_coef=cfg.get("value_coef", 0.5),
             num_epochs=cfg.get("ppo_epochs", cfg.get("num_epochs", 10)),
             batch_size=cfg["batch_size"],
             hidden_dim=cfg["hidden_dim"],
+            test_temperature=cfg.get("test_temperature", 0.3),
             device=device,
         )
         if algo == "ppo":
             return PPO(env, agent_id=agent_id, **ppo_common)
         else:
-            return MAPPO(env, **ppo_common)
+            # MAPPO 专属：reward_scale 仅 MAPPO 用（PPO 暂不支持，避免 PPO 构造签名变化）
+            return MAPPO(env, reward_scale=cfg.get("reward_scale", 0.01), **ppo_common)
 
     # off-policy 算法
     common = dict(
@@ -297,7 +308,11 @@ def main():
 
     # --- Step 3: 正常构建环境 ---
     cfg = _resolve_cfg(args)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.device)
+    print(f"[device] using {device}")
     env_cfg = get_env_config()
 
     # 应用自定义起终点（覆盖 scenario.npz 中的默认值）

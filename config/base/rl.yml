@@ -80,8 +80,20 @@ clip_epsilon:
   description: "PPO: clipping epsilon for policy ratio"
 
 entropy_coef:
+  value: 0.05
+  description: "PPO: entropy bonus coefficient (start value, decays per ep)"
+
+entropy_coef_min:
   value: 0.01
-  description: "PPO: entropy bonus coefficient (encourages exploration)"
+  description: "PPO: entropy coef floor (类比 epsilon_min)"
+
+entropy_coef_decay:
+  value: 0.99
+  description: "PPO: entropy coef decay per episode (类比 epsilon_decay)"
+
+test_temperature:
+  value: 0.3
+  description: "PPO: softmax temperature at test (<1 sharpens distribution to near-argmax)"
 
 value_coef:
   value: 0.5
@@ -94,3 +106,11 @@ ppo_epochs:
 ppo_lr:
   value: 1e-4
   description: "PPO: recommended learning rate (override via --lr 3e-4)"
+
+reward_scale:
+  value: 0.01
+  description: "MAPPO: scale env rewards before storing to rollout buffer. Brings return magnitude
+    to O(1)~O(10) so value-loss / value-clip / Adam step size stay in PPO's assumed regime.
+    Advantages are still re-normalized (cross-agent) inside update_all, so this primarily fixes
+    critic learning + value-clip semantics, not the actor's gradient direction. Logging stays
+    in raw reward units (env outputs unchanged)."
