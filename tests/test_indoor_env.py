@@ -47,7 +47,8 @@ def test_partial_observation_size():
 def test_full_observation_size():
     env = IndoorEnv(make_cfg(observation_mode="full"))
     obs = env.reset()
-    assert obs[0].shape[-1] == 225  # 15*15
+    expected = env.rows * env.cols
+    assert obs[0].shape[-1] == expected
 
 
 def test_cooperative_team_bonus():

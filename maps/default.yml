@@ -1,31 +1,38 @@
 map:
-  size: [15, 15]
+  size: [25, 25]
   num_agents: 2
   num_goals: 2
 
-  # 三个相邻房间，共享墙体：
-  #   room_1：左上 7x8（行 0-6，列 0-7），右墙在列 7
-  #   room_2：右上 7x8（行 0-6，列 7-14），与 room_1 共享列 7
-  #   room_3：底部 9x15（行 6-14，列 0-14），与上方两房间共享行 6
+  # 25x25 网格上排成 2x2 的四个房间，相邻房间共享墙体：
+  #   TL 左上：top_left=[0, 0]   size=[13, 13]   占行 0-12, 列 0-12
+  #   TR 右上：top_left=[0, 12]  size=[13, 13]   占行 0-12, 列 12-24
+  #   BL 左下：top_left=[12, 0]  size=[13, 13]   占行 12-24, 列 0-12
+  #   BR 右下：top_left=[12, 12] size=[13, 13]   占行 12-24, 列 12-24
   rooms:
-    - id: room_1
+    - id: room_tl
       top_left: [0, 0]
-      size: [7, 8]
-    - id: room_2
-      top_left: [0, 7]
-      size: [7, 8]
-    - id: room_3
-      top_left: [6, 0]
-      size: [9, 15]
+      size: [13, 13]
+    - id: room_tr
+      top_left: [0, 12]
+      size: [13, 13]
+    - id: room_bl
+      top_left: [12, 0]
+      size: [13, 13]
+    - id: room_br
+      top_left: [12, 12]
+      size: [13, 13]
 
-  # 门必须开在房间的共享墙上：
-  #   [3, 7]   room_1 <-> room_2 共享的列 7
-  #   [6, 4]   room_1 <-> room_3 共享的行 6
-  #   [6, 11]  room_2 <-> room_3 共享的行 6
+  # 四扇门开在四对相邻房间的共享墙上：
+  #   [6, 12]   TL <-> TR (共享列 12)
+  #   [18, 12]  BL <-> BR (共享列 12)
+  #   [12, 6]   TL <-> BL (共享行 12)
+  #   [12, 18]  TR <-> BR (共享行 12)
   doors:
-    - position: [3, 7]
-    - position: [6, 4]
-    - position: [6, 11]
+    - position: [6, 12]
+    - position: [18, 12]
+    - position: [12, 6]
+    - position: [12, 18]
 
-  agents_start: [[1, 1], [1, 13]]
-  goals:        [[13, 1], [13, 13]]
+  # Agents 在两个上房间起步；Goals 在对角下房间——每个 agent 至少要穿过两扇门
+  agents_start: [[2, 2], [2, 22]]
+  goals:        [[22, 22], [22, 2]]
