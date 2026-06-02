@@ -1,0 +1,146 @@
+<mxfile host="app.diagrams.net" modified="2026-06-02T00:00:00.000Z" agent="5.0" version="21.0.0" type="device">
+  <diagram id="train-flow" name="训练流程">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="训练流程（Off-policy / On-policy 通用）" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=20;fontStyle=1;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="200" y="20" width="760" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Start -->
+        <mxCell id="start" value="&lt;b&gt;开始&lt;/b&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#fff;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="530" y="70" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 -->
+        <mxCell id="s1" value="&lt;b&gt;1. 解析参数&lt;/b&gt;&lt;br/&gt;argparse: --algo --mode --map&lt;br/&gt;--num_episodes --lr --tag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="150" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 -->
+        <mxCell id="s2" value="&lt;b&gt;2. 加载配置&lt;/b&gt;&lt;br/&gt;load_config(config/config.yml)&lt;br/&gt;merge_overrides(CLI 参数)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="240" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 3 -->
+        <mxCell id="s3" value="&lt;b&gt;3. 构建环境&lt;/b&gt;&lt;br/&gt;load_map_spec(maps/default.yml)&lt;br/&gt;build_grid_array() → IndoorEnv(cfg)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="330" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Step 4 -->
+        <mxCell id="s4" value="&lt;b&gt;4. 实例化算法&lt;/b&gt;&lt;br/&gt;build_algorithm(name, env, cfg)&lt;br/&gt;→ ALGORITHM_REGISTRY[name](env, cfg)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="420" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: on/off policy -->
+        <mxCell id="dec1" value="&lt;b&gt;algo.is_on_policy?&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="490" y="510" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Off-policy branch -->
+        <mxCell id="off-head" value="OFF-POLICY 分支" style="text;html=1;fillColor=none;strokeColor=none;fontStyle=1;fontColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="160" y="510" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="off1" value="&lt;b&gt;创建 ReplayBuffer&lt;/b&gt;&lt;br/&gt;按 required_buffer() 类型：&lt;br/&gt;single | per_agent | joint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="560" width="200" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="off2" value="&lt;b&gt;episode 循环&lt;/b&gt;&lt;br/&gt;env.reset() → 观测 states" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="635" width="200" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="off3" value="&lt;b&gt;step 循环&lt;/b&gt;&lt;br/&gt;take_action(states, explore=True)&lt;br/&gt;env.step(actions)&lt;br/&gt;_push(buffer, transition)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="110" y="700" width="240" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="off4" value="&lt;b&gt;每 train_interval 步&lt;/b&gt;&lt;br/&gt;buffer.sample(batch_size)&lt;br/&gt;algo.update(batch)&lt;br/&gt;→ {loss, epsilon}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF8000;strokeColor=#AE4132;fontColor=#fff;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="110" y="785" width="240" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- On-policy branch -->
+        <mxCell id="on-head" value="ON-POLICY 分支" style="text;html=1;fillColor=none;strokeColor=none;fontStyle=1;fontColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="830" y="510" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="on1" value="&lt;b&gt;episode 循环&lt;/b&gt;&lt;br/&gt;env.reset()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="560" width="200" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="on2" value="&lt;b&gt;step 循环&lt;/b&gt;&lt;br/&gt;algo.evaluate(state)&lt;br/&gt;→ (action, log_prob, value)&lt;br/&gt;收集 rollout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="625" width="200" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="on3" value="&lt;b&gt;每 update_interval 步&lt;/b&gt;&lt;br/&gt;_compute_gae(rollout)&lt;br/&gt;→ advantages, returns&lt;br/&gt;algo.update(rollout)&lt;br/&gt;ppo_epochs 轮 minibatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9673a6;strokeColor=#6B3FA0;fontColor=#fff;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="710" width="200" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- Merge: save checkpoint -->
+        <mxCell id="save" value="&lt;b&gt;每 save_interval 轮保存 checkpoint&lt;/b&gt;&lt;br/&gt;algo.save(experiments/&lt;run&gt;/model.pth)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="870" width="300" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- End -->
+        <mxCell id="end" value="&lt;b&gt;训练结束&lt;/b&gt;&lt;br/&gt;plot_training() → reward.png + steps.png&lt;br/&gt;TrainResult{run_id, model_path, history}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#fff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="950" width="320" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows main flow -->
+        <mxCell id="a-start-s1" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1ba1e2;strokeWidth=2;" edge="1" parent="1" source="start" target="s1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-s1-s2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-s2-s3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-s3-s4" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-s4-dec" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="s4" target="dec1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- off-policy branch -->
+        <mxCell id="a-dec-off" value="否" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;strokeWidth=2;exitX=0;exitY=0.5;" edge="1" parent="1" source="dec1" target="off1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-off1-off2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="off1" target="off2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-off2-off3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="off2" target="off3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-off3-off4" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#FF8000;strokeWidth=2;" edge="1" parent="1" source="off3" target="off4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-off4-save" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#7B4FA6;strokeWidth=2;" edge="1" parent="1" source="off4" target="save">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- on-policy branch -->
+        <mxCell id="a-dec-on" value="是" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;exitX=1;exitY=0.5;" edge="1" parent="1" source="dec1" target="on1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-on1-on2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;" edge="1" parent="1" source="on1" target="on2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-on2-on3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;" edge="1" parent="1" source="on2" target="on3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a-on3-save" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#7B4FA6;strokeWidth=2;" edge="1" parent="1" source="on3" target="save">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- save -> end -->
+        <mxCell id="a-save-end" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1ba1e2;strokeWidth=2;" edge="1" parent="1" source="save" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

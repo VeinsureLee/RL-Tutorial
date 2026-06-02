@@ -1,0 +1,144 @@
+<mxfile host="app.diagrams.net" modified="2026-06-02T00:00:00.000Z" agent="5.0" version="21.0.0" type="device">
+  <diagram id="sys-arch" name="系统架构">
+    <mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== 标题 ===== -->
+        <mxCell id="title" value="MARL-Nav 系统架构" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="280" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Layer 0: 入口层 ===== -->
+        <mxCell id="layer0-bg" value="入口层 (Entry)" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;horizontal=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="1080" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cli" value="&lt;b&gt;main.py&lt;/b&gt;&lt;br/&gt;CLI 入口&lt;br/&gt;--algo --mode --map&lt;br/&gt;--num_episodes --lr" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer0-bg">
+          <mxGeometry x="100" y="35" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="&lt;b&gt;api/main.py&lt;/b&gt;&lt;br/&gt;FastAPI 服务&lt;br/&gt;POST /train  GET /status&lt;br/&gt;POST /test   GET /health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer0-bg">
+          <mxGeometry x="380" y="35" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="runs" value="&lt;b&gt;api/runs.py&lt;/b&gt;&lt;br/&gt;RunState 注册表&lt;br/&gt;asyncio 后台任务&lt;br/&gt;run_id 轮询" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer0-bg">
+          <mxGeometry x="650" y="35" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow CLI -> merge point -->
+        <mxCell id="arr-cli" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;entryX=0.3;entryY=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="cli" target="layer1-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arr-api" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="api" target="layer1-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Layer 1: 配置层 ===== -->
+        <mxCell id="layer1-bg" value="配置层 (Config)" style="swimlane;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="1080" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="config-yml" value="&lt;b&gt;config/config.yml&lt;/b&gt;&lt;br/&gt;所有超参的唯一来源&lt;br/&gt;seed · env · algorithm · logging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#67AB9F;strokeColor=#23876E;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer1-bg">
+          <mxGeometry x="100" y="30" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="map-yml" value="&lt;b&gt;maps/*.yml&lt;/b&gt;&lt;br/&gt;地图几何定义&lt;br/&gt;rooms · doors · agents_start · goals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#67AB9F;strokeColor=#23876E;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer1-bg">
+          <mxGeometry x="380" y="30" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="utils-config" value="&lt;b&gt;utils/config.py&lt;/b&gt;&lt;br/&gt;load_config()&lt;br/&gt;merge_overrides()  CLI/API 覆盖" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#67AB9F;strokeColor=#23876E;fontColor=#ffffff;fontSize=11;" vertex="1" parent="layer1-bg">
+          <mxGeometry x="660" y="30" width="220" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Layer 2: 环境层 ===== -->
+        <mxCell id="layer2-bg" value="环境层 (Environment)" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="340" width="1080" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="map-builder" value="&lt;b&gt;envs/map_builder.py&lt;/b&gt;&lt;br/&gt;load_map_spec()  build_grid_array()&lt;br/&gt;WALL=1  DOOR=2  EMPTY=0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD966;strokeColor=#B46504;fontSize=11;" vertex="1" parent="layer2-bg">
+          <mxGeometry x="100" y="30" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="indoor-env" value="&lt;b&gt;envs/indoor_env.py  IndoorEnv&lt;/b&gt;&lt;br/&gt;Gymnasium 多智能体接口&lt;br/&gt;obs: dict[id, ndarray]  action: dict[id, int]&lt;br/&gt;reward_mode: independent | cooperative&lt;br/&gt;obs_mode: partial(7×7) | full(25×25)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD966;strokeColor=#B46504;fontSize=11;" vertex="1" parent="layer2-bg">
+          <mxGeometry x="400" y="20" width="560" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Layer 3: 算法层 ===== -->
+        <mxCell id="layer3-bg" value="算法层 (Algorithms)" style="swimlane;startSize=30;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="1080" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="base" value="&lt;b&gt;algorithms/base.py&lt;/b&gt;&lt;br/&gt;BaseAlgorithm&lt;br/&gt;take_action() update()&lt;br/&gt;save() load()&lt;br/&gt;is_on_policy required_buffer()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="layer3-bg">
+          <mxGeometry x="20" y="35" width="160" height="100" as="geometry" />
+        </mxCell>
+        <!-- Value-based group -->
+        <mxCell id="vb-group" value="Value-based (DTDE / CTDE)" style="swimlane;startSize=25;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;fontStyle=1;" vertex="1" parent="layer3-bg">
+          <mxGeometry x="200" y="25" width="600" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="dqn-cell" value="&lt;b&gt;DQN&lt;/b&gt;&lt;br/&gt;单智能体" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF8000;strokeColor=#AE4132;fontColor=#fff;fontSize=10;" vertex="1" parent="vb-group">
+          <mxGeometry x="10" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="madqn-cell" value="&lt;b&gt;MADQN&lt;/b&gt;&lt;br/&gt;独立多智能体" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF8000;strokeColor=#AE4132;fontColor=#fff;fontSize=10;" vertex="1" parent="vb-group">
+          <mxGeometry x="115" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="smadqn-cell" value="&lt;b&gt;SharedMADQN&lt;/b&gt;&lt;br/&gt;参数共享" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF8000;strokeColor=#AE4132;fontColor=#fff;fontSize=10;" vertex="1" parent="vb-group">
+          <mxGeometry x="220" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="vdn-cell" value="&lt;b&gt;VDN&lt;/b&gt;&lt;br/&gt;加性值分解&lt;br/&gt;CTDE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d79b00;strokeColor=#6D4100;fontColor=#fff;fontSize=10;" vertex="1" parent="vb-group">
+          <mxGeometry x="325" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="qmix-cell" value="&lt;b&gt;QMIX&lt;/b&gt;&lt;br/&gt;单调 mixer&lt;br/&gt;CTDE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d79b00;strokeColor=#6D4100;fontColor=#fff;fontSize=10;" vertex="1" parent="vb-group">
+          <mxGeometry x="430" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <!-- Policy-based group -->
+        <mxCell id="pb-group" value="Policy-based" style="swimlane;startSize=25;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="layer3-bg">
+          <mxGeometry x="820" y="25" width="230" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ppo-cell" value="&lt;b&gt;PPO&lt;/b&gt;&lt;br/&gt;单智能体" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9673a6;strokeColor=#6B3FA0;fontColor=#fff;fontSize=10;" vertex="1" parent="pb-group">
+          <mxGeometry x="15" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="mappo-cell" value="&lt;b&gt;MAPPO&lt;/b&gt;&lt;br/&gt;共享 actor&lt;br/&gt;中心化 critic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9673a6;strokeColor=#6B3FA0;fontColor=#fff;fontSize=10;" vertex="1" parent="pb-group">
+          <mxGeometry x="120" y="35" width="90" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Layer 4: Core 层 ===== -->
+        <mxCell id="layer4-bg" value="Core 层 (Training / Testing)" style="swimlane;startSize=30;fillColor=#e8def8;strokeColor=#7b4fa6;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="670" width="1080" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer" value="&lt;b&gt;core/trainer.py&lt;/b&gt;&lt;br/&gt;train()&lt;br/&gt;off-policy / on-policy 分支" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="layer4-bg">
+          <mxGeometry x="80" y="25" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="tester" value="&lt;b&gt;core/tester.py&lt;/b&gt;&lt;br/&gt;test()  nav.gif  nav_final.png" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="layer4-bg">
+          <mxGeometry x="340" y="25" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="replay" value="&lt;b&gt;core/replay.py&lt;/b&gt;&lt;br/&gt;ReplayBuffer  JointReplayBuffer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="layer4-bg">
+          <mxGeometry x="600" y="25" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="plot" value="&lt;b&gt;core/plot.py&lt;/b&gt;&lt;br/&gt;reward.png  steps.png" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B4FA6;strokeColor=#4C1D80;fontColor=#fff;fontSize=11;" vertex="1" parent="layer4-bg">
+          <mxGeometry x="860" y="25" width="170" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 输出层 ===== -->
+        <mxCell id="output-bg" value="输出 (Output)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="800" width="1080" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-exp" value="&lt;b&gt;experiments/&lt;/b&gt;&lt;br/&gt;model.pth · figs/ · run.log" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666;strokeColor=#333;fontColor=#fff;fontSize=11;" vertex="1" parent="output-bg">
+          <mxGeometry x="100" y="15" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="out-gif" value="&lt;b&gt;test/nav.gif&lt;/b&gt;&lt;br/&gt;轨迹可视化动画" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666;strokeColor=#333;fontColor=#fff;fontSize=11;" vertex="1" parent="output-bg">
+          <mxGeometry x="420" y="15" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="out-api" value="&lt;b&gt;HTTP JSON&lt;/b&gt;&lt;br/&gt;{run_id, status, reward, model_path}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666;strokeColor=#333;fontColor=#fff;fontSize=11;" vertex="1" parent="output-bg">
+          <mxGeometry x="700" y="15" width="260" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Cross-layer arrows -->
+        <mxCell id="a1" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="layer1-bg" target="layer2-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="layer2-bg" target="layer3-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="layer3-bg" target="layer4-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#7b4fa6;strokeWidth=2;" edge="1" parent="1" source="layer4-bg" target="output-bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
