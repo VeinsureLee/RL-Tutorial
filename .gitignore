@@ -50,8 +50,7 @@ todo/
 docs/superpowers/
 
 # 训练产物（每次 run 体量大，按需手动归档）
-experiments/runs/
-experiments/unit_tests/
+experiments/
 
 # 历史归档目录（部分含敏感原件，整体不入库；旧归档已入库的不动）
 archive/legacy_paper_tex/
