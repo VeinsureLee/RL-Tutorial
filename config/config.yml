@@ -1,0 +1,40 @@
+seed: 42
+
+env:
+  map_file: "default"
+  observation_mode: "partial"   # partial | full
+  partial_view_size: 7
+  reward_mode: "independent"    # independent | cooperative
+  reward_goal: 10.0
+  reward_step: -0.01
+  reward_collision: -1.0
+  reward_team_bonus: 5.0
+
+algorithm:
+  name: "dqn"
+  lr: 1.0e-4
+  gamma: 0.99
+  hidden_dim: 128
+  num_episodes: 500
+  episode_length: 500
+  batch_size: 64
+
+  # off-policy
+  epsilon: 0.9
+  epsilon_min: 0.05
+  epsilon_decay: 0.995
+  replay_buffer_size: 50000
+  train_interval: 4
+  update_freq: 10
+
+  # on-policy
+  update_interval: 1024
+  clip_epsilon: 0.2
+  ppo_epochs: 5
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  value_coef: 0.5
+
+logging:
+  log_dir: "experiments"
+  save_interval: 50

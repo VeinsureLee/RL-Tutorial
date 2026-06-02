@@ -1,0 +1,22 @@
+map:
+  size: [15, 15]
+  num_agents: 2
+  num_goals: 2
+
+  rooms:
+    - id: room_1
+      top_left: [0, 0]
+      size: [7, 7]
+    - id: room_2
+      top_left: [0, 8]
+      size: [7, 7]
+    - id: room_3
+      top_left: [8, 0]
+      size: [15, 15]
+
+  doors:
+    - position: [3, 7]
+    - position: [7, 4]
+
+  agents_start: [[1, 1], [1, 13]]
+  goals:        [[13, 1], [13, 13]]
